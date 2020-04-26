@@ -1,10 +1,13 @@
 #[macro_use] extern crate log;
 use tokio;
 use futures::future::FutureExt;
+use bson::{doc, bson};
 
 use riven::RiotApi;
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
+use mongodb::{Client, options::ClientOptions};
+use mongodb::options::FindOptions;
 
 use promise_buffer::promise_buffer;
 
@@ -13,10 +16,19 @@ mod promise_buffer;
 #[tokio::main]
 async fn main() -> () {
     env_logger::init();
+
+    let api = RiotApi::with_key("RGAPI-bef235e0-609a-424e-b7ab-49ed8ac54c87"); // 24hr dev key
+    
+    let mut client_options = ClientOptions::parse("mongodb://localhost:27017").unwrap();
+    client_options.app_name = Some("My App".to_string());
+    let client = Client::with_options(client_options).unwrap();
+    let db = client.database("tft");
+
     Main {
         region: Region::EUW,
         region_major: Region::EUROPE,
-        api: RiotApi::with_key("RGAPI-bef235e0-609a-424e-b7ab-49ed8ac54c87"),
+        api,
+        db,
     }.do_cycle().await;
 }
 
@@ -24,6 +36,7 @@ struct Main {
     api: RiotApi,    
     region: Region,
     region_major: Region,
+    db: mongodb::Database
 }
 
 impl Main {
@@ -33,11 +46,11 @@ impl Main {
         info!("Gathered summoner ids for {} players.", summoner_list.len());
 
         // Vec of Futures
-        let mut q: Vec<_> = summoner_list.iter().map(|id| self.process_summoner_id(id).boxed()).collect();
+        let q: Vec<_> = summoner_list.iter().map(|id| self.process_summoner_id(id).boxed()).collect();
         
         let mut game_id_list: Vec<String> = Vec::new();
         
-        promise_buffer(q, 10,
+        promise_buffer(q, 50,
            |mut r| {
                match r {
                     Ok(ref mut v) => game_id_list.append(v),
@@ -46,16 +59,35 @@ impl Main {
            },
         ).await;
 
+        let total = game_id_list.len();
         // Now process game_id_list
         game_id_list.sort();
         game_id_list.dedup();
+        info!("Game list obtained sz: {}, uniq: {}.", total, game_id_list.len());
 
-        let mut q: Vec<_> = game_id_list.iter().map(|id| self.process_match_id(id).boxed()).collect();
-    
+        let q: Vec<_> = game_id_list.iter().map(|id| self.process_match_id(id).boxed()).collect();
+        
+        promise_buffer(q, 50,
+            |r| {
+                match r {
+                     Ok(_) => {},
+                     Err(e) => error!("{:#?}", e)
+                }
+            },
+         ).await;
+
         info!("Main Done.");
     }
 
     async fn process_match_id(&self, id: &str) -> anyhow::Result<()>{
+        let collection = self.db.collection("matches");
+        let filter = doc! {"_id": id};
+        let find_options = FindOptions::default();
+        let cursor = collection.find(filter, find_options)?;
+
+        let collection: Vec<_> = cursor.collect();
+        debug!("{:#?}", collection);
+
         Ok(())
     }
 
