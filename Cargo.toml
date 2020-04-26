@@ -7,3 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-std = "*"
+futures = "=0.3.3"
+riven = "^1.1.0"
+tokio = { version = "*", features = ["macros"]}
+log = "*"
+env_logger = "*"
+anyhow = "*"
