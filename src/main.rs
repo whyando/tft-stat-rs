@@ -32,8 +32,10 @@ async fn main() -> () {
     let db = client.database("tft");
 
     Main {
-        region: Region::EUW,
-        region_major: Region::EUROPE,
+        // region: Region::EUW,
+        // region_major: Region::EUROPE,
+        region: Region::KR,
+        region_major: Region::ASIA,
         api,
         db,
     }.do_cycle().await;
@@ -88,7 +90,7 @@ impl Main {
     }
 
     async fn process_match_id(&self, id: &str) -> anyhow::Result<i64>{
-        let matches = self.db.collection("matches");
+        let matches = self.db.collection("matches1");
         let filter = doc! {"_id": id};
         let find_options = FindOptions::default();
         let cursor = matches.find(filter, find_options)?;
