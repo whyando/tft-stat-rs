@@ -62,18 +62,6 @@ impl Main {
         info!("Main Done.");
     }
 
-    async fn process_match_id(&self, id: &str) -> anyhow::Result<()>{
-        let collection = self.db.collection("matches");
-        let filter = doc! {"_id": id};
-        let find_options = FindOptions::default();
-        let cursor = collection.find(filter, find_options)?;
-
-        let collection: Vec<_> = cursor.collect();
-        debug!("{:#?}", collection);
-
-        Ok(())
-    }
-
     async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
         let player = self.api.summoner_v4().get_by_summoner_id(self.region, id).await?;
         let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(20)).await?;
@@ -82,6 +70,25 @@ impl Main {
         for x in player_match {
             self.process_match_id(&x).await?;
         }
+        Ok(())
+    }
+
+    async fn process_match_id(&self, id: &str) -> anyhow::Result<()>{
+        let matches = self.db.collection("matches");
+        let filter = doc! {"_id": id};
+        let find_options = FindOptions::default();
+        let cursor = matches.find(filter, find_options)?;
+
+        let ret: Vec<_> = cursor.collect();
+        debug!("{:#?}", ret);
+
+        if ret.len() != 0 {
+            return Ok(());
+        }
+
+        let game = self.api.tft_match_v1().get_match(self.region_major, id).await?;
+        debug!("{:?}", game);
+
         Ok(())
     }
 
