@@ -70,18 +70,24 @@ impl Main {
     async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
         let player = self.api.summoner_v4().get_by_summoner_id(self.region, id).await?;
         let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(20)).await?;
-        debug!("{} {} {:#?} {}", index, self.region, player.name, player_match.len());
 
-        for x in player_match {
+        let mut new_games = 0;
+        let mut repeat_games = 0;
+        let mut new_bugged = 0;
+        for x in &player_match {
             match self.process_match_id(&x).await {
                 Err(e) =>  error!("{:#?}", e),
-                _ => {},
+                Ok(-1) => new_bugged += 1,
+                Ok(0) => repeat_games += 1,
+                Ok(1) => new_games += 1,
+                Ok(_) => unreachable!(),
             }
         }
+        debug!("{} {} {:#?} {} ({} New, {} Old, {} Bugged)", index, self.region, player.name, player_match.len(), new_games, repeat_games, new_bugged);
         Ok(())
     }
 
-    async fn process_match_id(&self, id: &str) -> anyhow::Result<()>{
+    async fn process_match_id(&self, id: &str) -> anyhow::Result<i64>{
         let matches = self.db.collection("matches");
         let filter = doc! {"_id": id};
         let find_options = FindOptions::default();
@@ -91,7 +97,7 @@ impl Main {
         debug!("{:#?}", ret);
 
         if ret.len() != 0 {
-            return Ok(());
+            return Ok(0);
         }
 
         let game = match self.api.tft_match_v1().get_match(self.region_major, id).await {
@@ -108,7 +114,7 @@ impl Main {
             }
         };
 
-        let mut game_json = match game {
+        let mut game_json = match &game {
             None => json!({}),
             Some(g) =>  serde_json::to_value(g).unwrap()
         };
@@ -117,7 +123,10 @@ impl Main {
         let doc = bson.as_document().unwrap();
         matches.insert_one(doc.clone(), None)?;
 
-        Ok(())
+        match &game {
+            None => Ok(-1),
+            Some(_) => Ok(1),
+        }
     }
 
     async fn get_top_players(&self) -> Vec<String> {
