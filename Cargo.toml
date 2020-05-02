@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 async-std = "*"
 futures = "=0.3.3"
-riven = "^1.1.0"
+riven = "1.1.0"
 tokio = { version = "*", features = ["macros"]}
 log = "*"
 env_logger = "*"

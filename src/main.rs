@@ -86,7 +86,9 @@ impl Main {
             return Ok(());
         }
 
-        let game = self.api.tft_match_v1().get_match(self.region_major, id).await?;
+        let game = self.api.tft_match_v1().get_match(self.region_major, id).await.or_else(|e| {
+            return Err(anyhow::Error::msg(format!("GET_MATCH({},{}) FAILED: {}", self.region_major, id, e)));
+        });
         debug!("{:?}", game);
 
         Ok(())
