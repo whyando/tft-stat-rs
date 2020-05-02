@@ -1,4 +1,5 @@
 #[macro_use] extern crate log;
+use std::collections::VecDeque;
 use tokio;
 use futures::future::FutureExt;
 use bson::{doc, bson};
@@ -17,7 +18,8 @@ mod promise_buffer;
 async fn main() -> () {
     env_logger::init();
 
-    let api = RiotApi::with_key("RGAPI-bef235e0-609a-424e-b7ab-49ed8ac54c87"); // 24hr dev key
+    let api_key = std::env::var("API_KEY").unwrap();
+    let api = RiotApi::with_key(api_key);
     
     let mut client_options = ClientOptions::parse("mongodb://localhost:27017").unwrap();
     client_options.app_name = Some("My App".to_string());
@@ -46,35 +48,16 @@ impl Main {
         info!("Gathered summoner ids for {} players.", summoner_list.len());
 
         // Vec of Futures
-        let q: Vec<_> = summoner_list.iter().map(|id| self.process_summoner_id(id).boxed()).collect();
+        let q: VecDeque<_> = summoner_list.iter().enumerate().map(|(index, id)| self.process_summoner_id(index, id).boxed()).collect();
         
-        let mut game_id_list: Vec<String> = Vec::new();
-        
-        promise_buffer(q, 50,
-           |mut r| {
-               match r {
-                    Ok(ref mut v) => game_id_list.append(v),
-                    Err(e) => error!("{:#?}", e)
-               }
-           },
-        ).await;
-
-        let total = game_id_list.len();
-        // Now process game_id_list
-        game_id_list.sort();
-        game_id_list.dedup();
-        info!("Game list obtained sz: {}, uniq: {}.", total, game_id_list.len());
-
-        let q: Vec<_> = game_id_list.iter().map(|id| self.process_match_id(id).boxed()).collect();
-        
-        promise_buffer(q, 50,
-            |r| {
-                match r {
-                     Ok(_) => {},
-                     Err(e) => error!("{:#?}", e)
-                }
-            },
-         ).await;
+        promise_buffer(q, 50, |result| {
+            match result {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("{:#?}", e);
+                },
+            }
+        }).await;
 
         info!("Main Done.");
     }
@@ -91,11 +74,15 @@ impl Main {
         Ok(())
     }
 
-    async fn process_summoner_id(&self, id: &str) -> anyhow::Result<Vec<String>> {
+    async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
         let player = self.api.summoner_v4().get_by_summoner_id(self.region, id).await?;
         let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(20)).await?;
-        debug!("{:#?} {}", player.name, player_match.len());
-        Ok(player_match)
+        debug!("{} {} {:#?} {}", index, self.region, player.name, player_match.len());
+
+        for x in player_match {
+            self.process_match_id(&x).await?;
+        }
+        Ok(())
     }
 
     async fn get_top_players(&self) -> Vec<String> {
