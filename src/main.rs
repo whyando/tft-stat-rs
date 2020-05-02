@@ -2,7 +2,8 @@
 use std::collections::VecDeque;
 use tokio;
 use futures::future::FutureExt;
-use bson::{doc, bson};
+use bson;
+use bson::doc;
 use serde_json::json;
 use serde_json;
 
@@ -15,6 +16,8 @@ use mongodb::options::FindOptions;
 use promise_buffer::promise_buffer;
 
 mod promise_buffer;
+
+const DECODE_ERROR: &str = "error decoding response body: missing field `tier_total`";
 
 #[tokio::main]
 async fn main() -> () {
@@ -91,16 +94,28 @@ impl Main {
             return Ok(());
         }
 
-        let game = self.api.tft_match_v1().get_match(self.region_major, id).await.map_err(|e| {
-            let req_err: &reqwest::Error = e.source_reqwest_error();
-            error!("'{}'", req_err.to_string());
-            anyhow::Error::msg(format!("GET_MATCH({},{}) FAILED: {}", self.region_major, id, e))
-        })?;
+        let game = match self.api.tft_match_v1().get_match(self.region_major, id).await {
+            Ok(g) => Some(g),
+            Err(e) => {
+                let req_err = e.source_reqwest_error().to_string();
+                if req_err.starts_with(DECODE_ERROR) {
+                    warn!("Decode error on GET_MATCH({},{})", self.region_major, id);
+                    None
+                } else {
+                    error!("Error on GET_MATCH({},{})", self.region_major, id);
+                    None
+                }
+            }
+        };
 
-        let mut game_json = serde_json::to_value(game).unwrap();
+        let mut game_json = match game {
+            None => json!({}),
+            Some(g) =>  serde_json::to_value(g).unwrap()
+        };
         game_json["_id"] = json!(id);
-
-
+        let bson: bson::Bson = game_json.into();
+        let doc = bson.as_document().unwrap();
+        matches.insert_one(doc.clone(), None)?;
 
         Ok(())
     }
