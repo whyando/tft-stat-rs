@@ -94,7 +94,7 @@ impl Main {
         let cursor = matches.find(filter, find_options)?;
 
         let ret: Vec<_> = cursor.collect();
-        debug!("{:#?}", ret);
+        // debug!("{:#?}", ret);
 
         if ret.len() != 0 {
             return Ok(0);
