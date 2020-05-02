@@ -52,10 +52,10 @@ impl Main {
         let summoner_list = self.get_top_players().await;
         info!("Gathered summoner ids for {} players.", summoner_list.len());
 
-        // Vec of Futures
+        // VecDeque of Futures
         let q: VecDeque<_> = summoner_list.iter().enumerate().map(|(index, id)| self.process_summoner_id(index, id).boxed()).collect();
         
-        promise_buffer(q, 50, |result| {
+        promise_buffer(q, 1, |result| {
             match result {
                 Ok(_) => {}
                 Err(e) => {
