@@ -3,6 +3,8 @@ use std::collections::VecDeque;
 use tokio;
 use futures::future::FutureExt;
 use bson::{doc, bson};
+use serde_json::json;
+use serde_json;
 
 use riven::RiotApi;
 use riven::consts::Region;
@@ -68,7 +70,10 @@ impl Main {
         debug!("{} {} {:#?} {}", index, self.region, player.name, player_match.len());
 
         for x in player_match {
-            self.process_match_id(&x).await?;
+            match self.process_match_id(&x).await {
+                Err(e) =>  error!("{:#?}", e),
+                _ => {},
+            }
         }
         Ok(())
     }
@@ -86,10 +91,16 @@ impl Main {
             return Ok(());
         }
 
-        let game = self.api.tft_match_v1().get_match(self.region_major, id).await.or_else(|e| {
-            return Err(anyhow::Error::msg(format!("GET_MATCH({},{}) FAILED: {}", self.region_major, id, e)));
-        });
-        debug!("{:?}", game);
+        let game = self.api.tft_match_v1().get_match(self.region_major, id).await.map_err(|e| {
+            let req_err: &reqwest::Error = e.source_reqwest_error();
+            error!("'{}'", req_err.to_string());
+            anyhow::Error::msg(format!("GET_MATCH({},{}) FAILED: {}", self.region_major, id, e))
+        })?;
+
+        let mut game_json = serde_json::to_value(game).unwrap();
+        game_json["_id"] = json!(id);
+
+
 
         Ok(())
     }
