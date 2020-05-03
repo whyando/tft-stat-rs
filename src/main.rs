@@ -99,7 +99,7 @@ impl Main {
     }
 
     async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
-        let player = self.api.summoner_v4().get_by_summoner_id(self.region, id).await?;
+        let player = self.api.tft_summoner_v1().get_by_summoner_id(self.region, id).await?;
         let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(10)).await?;
 
         let mut new: i32 = 0;
