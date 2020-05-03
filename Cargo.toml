@@ -1,5 +1,5 @@
 [package]
-name = "tft_stat_rust"
+name = "tft_stat"
 version = "0.1.0"
 authors = ["Justin Auger <justinauger@gmail.com>"]
 edition = "2018"
@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 async-std = "*"
 futures = "=0.3.3"
-riven = "1.1.0"
+riven = "1.2.0"
 tokio = { version = "*", features = ["macros"]}
 log = "*"
 env_logger = "*"

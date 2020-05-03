@@ -6,8 +6,9 @@ use bson;
 use bson::doc;
 use serde_json::json;
 use serde_json;
+use std::sync::Arc;
 
-use riven::RiotApi;
+use riven::{RiotApi, RiotApiConfig};
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use mongodb::{Client, options::ClientOptions};
@@ -17,42 +18,67 @@ use promise_buffer::promise_buffer;
 
 mod promise_buffer;
 
-const DECODE_ERROR: &str = "error decoding response body: missing field `tier_total`";
-
 #[tokio::main]
 async fn main() -> () {
     env_logger::init();
 
-    let api_key = std::env::var("API_KEY").unwrap();
-    let api = RiotApi::with_key(api_key);
+    let db_connection_string = std::env::var("DB_CONNECTION_STRING").expect("Missing environment variable: DB_CONNECTION_STRING");
+    let api_key = std::env::var("RGAPI_KEY").expect("Missing environment variable: RGAPI_KEY");
+    let api_config = RiotApiConfig::with_key(api_key).preconfig_throughput();
+    let api = Arc::new(RiotApi::with_config(api_config));
     
-    let mut client_options = ClientOptions::parse("mongodb://localhost:27017").unwrap();
-    client_options.app_name = Some("My App".to_string());
+    let mut client_options = ClientOptions::parse(&db_connection_string).unwrap();
+    client_options.app_name = Some("tft_stat".to_string());
     let client = Client::with_options(client_options).unwrap();
-    let db = client.database("tft");
-
-    Main {
-        // region: Region::EUW,
-        // region_major: Region::EUROPE,
+    let db = Arc::new(client.database("tft"));
+    
+    let m1 = Main {
+        region: Region::NA,
+        region_major: Region::AMERICAS,
+        api: api.clone(),
+        db: db.clone(),
+    };
+    let m2 = Main {
+        region: Region::EUW,
+        region_major: Region::EUROPE,
+        api: api.clone(),
+        db: db.clone(),
+    };
+    let m3 = Main {
         region: Region::KR,
         region_major: Region::ASIA,
-        api,
-        db,
-    }.do_cycle().await;
+        api: api.clone(),
+        db: db.clone(),
+    };
+    tokio::spawn(async move {
+        loop {
+            m1.do_cycle().await;
+        }
+    });
+    tokio::spawn(async move {
+        loop {
+            m2.do_cycle().await;
+        }
+    });
+    tokio::spawn(async move {
+        loop {
+            m3.do_cycle().await;
+        }
+    });
 }
 
 struct Main {
-    api: RiotApi,    
+    api: Arc<RiotApi>,    
     region: Region,
     region_major: Region,
-    db: mongodb::Database
+    db: Arc<mongodb::Database>
 }
 
 impl Main {
     async fn do_cycle(&self) {
-        info!("Main begin.");
+        info!("[{}] Main begin.", self.region);
         let summoner_list = self.get_top_players().await;
-        info!("Gathered summoner ids for {} players.", summoner_list.len());
+        info!("[{}] Gathered summoner ids for {} players.", self.region, summoner_list.len());
 
         // VecDeque of Futures
         let q: VecDeque<_> = summoner_list.iter().enumerate().map(|(index, id)| self.process_summoner_id(index, id).boxed()).collect();
@@ -66,31 +92,31 @@ impl Main {
             }
         }).await;
 
-        info!("Main Done.");
+        info!("[{}] Main Done.", self.region);
     }
 
     async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
         let player = self.api.summoner_v4().get_by_summoner_id(self.region, id).await?;
         let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(20)).await?;
 
-        let mut new_games = 0;
-        let mut repeat_games = 0;
-        let mut new_bugged = 0;
+        let mut new: i32 = 0;
+        let mut repeat: i32 = 0;
+        let mut new_error: i32 = 0;
         for x in &player_match {
             match self.process_match_id(&x).await {
                 Err(e) =>  error!("{:#?}", e),
-                Ok(-1) => new_bugged += 1,
-                Ok(0) => repeat_games += 1,
-                Ok(1) => new_games += 1,
+                Ok(-1) => new_error += 1,
+                Ok(0) => repeat += 1,
+                Ok(1) => new += 1,
                 Ok(_) => unreachable!(),
             }
         }
-        debug!("{} {} {:#?} {} ({} New, {} Old, {} Bugged)", index, self.region, player.name, player_match.len(), new_games, repeat_games, new_bugged);
+        debug!("{} {} {:#?} {} ({} New, {} Old, {} Error)", index, self.region, player.name, player_match.len(), new, repeat, new_error);
         Ok(())
     }
 
     async fn process_match_id(&self, id: &str) -> anyhow::Result<i64>{
-        let matches = self.db.collection("matches1");
+        let matches = self.db.collection("matches_v2");
         let filter = doc! {"_id": id};
         let find_options = FindOptions::default();
         let cursor = matches.find(filter, find_options)?;
@@ -103,18 +129,15 @@ impl Main {
         }
 
         let game = match self.api.tft_match_v1().get_match(self.region_major, id).await {
-            Ok(g) => Some(g),
+            Ok(g) => g,
             Err(e) => {
-                let req_err = e.source_reqwest_error().to_string();
-                if req_err.starts_with(DECODE_ERROR) {
-                    warn!("Decode error on GET_MATCH({},{})", self.region_major, id);
-                    None
-                } else {
-                    error!("Error on GET_MATCH({},{})", self.region_major, id);
-                    None
-                }
+                // let req_err = e.source_reqwest_error().to_string();
+                error!("Error on GET_MATCH({},{}): {}", self.region_major, id, e);
+                None
             }
         };
+
+        
 
         let mut game_json = match &game {
             None => json!({}),
@@ -122,6 +145,7 @@ impl Main {
         };
         game_json["_id"] = json!(id);
         let bson: bson::Bson = game_json.into();
+
         let doc = bson.as_document().unwrap();
         matches.insert_one(doc.clone(), None)?;
 
@@ -136,9 +160,9 @@ impl Main {
     
         for (tier, division) in &[
             ("CHALLENGER", "I"),
-            // ("GRANDMASTER", "I"),
-            // ("MASTER", "I"),
-            // ("DIAMOND", "I"),
+            ("GRANDMASTER", "I"),
+            ("MASTER", "I"),
+            ("DIAMOND", "I"),
             // ("DIAMOND", "II"),
             // ("DIAMOND", "III"),
             // ("DIAMOND", "IV"),

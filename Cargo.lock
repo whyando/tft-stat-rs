@@ -1496,9 +1496,9 @@ dependencies = [
 
 [[package]]
 name = "riven"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ea9a1023bc72c320508a511d673cdb3a605ecd2a10e264118aac1436a89c04d"
+checksum = "c0a37cf0b8a98f337986a863d586458203979c43acb3dc9060424637404dfe8e"
 dependencies = [
  "log",
  "num_enum",
@@ -1843,7 +1843,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tft_stat_rust"
+name = "tft_stat"
 version = "0.1.0"
 dependencies = [
  "anyhow",
