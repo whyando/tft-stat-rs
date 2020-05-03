@@ -50,21 +50,24 @@ async fn main() -> () {
         api: api.clone(),
         db: db.clone(),
     };
-    tokio::spawn(async move {
+    let s1 = tokio::spawn(async move {
         loop {
             m1.do_cycle().await;
         }
     });
-    tokio::spawn(async move {
+    let s2 = tokio::spawn(async move {
         loop {
             m2.do_cycle().await;
         }
     });
-    tokio::spawn(async move {
+    let s3 = tokio::spawn(async move {
         loop {
             m3.do_cycle().await;
         }
     });
+    s1.await.expect("The task being joined has panicked");
+    s2.await.expect("The task being joined has panicked");
+    s3.await.expect("The task being joined has panicked");
 }
 
 struct Main {
@@ -97,7 +100,7 @@ impl Main {
 
     async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
         let player = self.api.summoner_v4().get_by_summoner_id(self.region, id).await?;
-        let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(20)).await?;
+        let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(10)).await?;
 
         let mut new: i32 = 0;
         let mut repeat: i32 = 0;
