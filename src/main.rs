@@ -159,7 +159,7 @@ impl Main {
         let find_options = FindOneOptions::default();
         let doc = matches.find_one(filter, find_options).await?;
 
-        if doc.is_none() {
+        if let Some(_) = doc {
             return Ok(0);
         }
 
