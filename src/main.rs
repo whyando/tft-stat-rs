@@ -6,10 +6,11 @@ use futures::future::FutureExt;
 use serde_json;
 use serde_json::json;
 use std::collections::VecDeque;
+use std::iter::Iterator;
 use std::sync::Arc;
 use tokio;
 
-use mongodb::options::FindOptions;
+use mongodb::options::FindOneOptions;
 use mongodb::{options::ClientOptions, Client};
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
@@ -32,8 +33,9 @@ async fn main() -> () {
     let db = {
         let db_connection_string = std::env::var("DB_CONNECTION_STRING")
             .expect("Missing environment variable: DB_CONNECTION_STRING");
-        let mut client_options =
-            ClientOptions::parse(&db_connection_string).expect("Unable to parse DB options");
+        let mut client_options = ClientOptions::parse(&db_connection_string)
+            .await
+            .expect("Unable to parse DB options");
         client_options.app_name = Some("tft_stat".to_string());
         let client = Client::with_options(client_options).expect("Unable to construct DB client");
         Arc::new(client.database("tft"))
@@ -154,13 +156,10 @@ impl Main {
     async fn process_match_id(&self, id: &str) -> anyhow::Result<i64> {
         let matches = self.db.collection("matches_v2");
         let filter = doc! {"_id": id};
-        let find_options = FindOptions::default();
-        let cursor = matches.find(filter, find_options)?;
+        let find_options = FindOneOptions::default();
+        let doc = matches.find_one(filter, find_options).await?;
 
-        let ret: Vec<_> = cursor.collect();
-        // debug!("{:#?}", ret);
-
-        if ret.len() != 0 {
+        if doc.is_none() {
             return Ok(0);
         }
 
@@ -188,7 +187,7 @@ impl Main {
         let doc = bson
             .as_document()
             .ok_or_else(|| anyhow::Error::msg("Error creating mongo doc"))?;
-        matches.insert_one(doc.clone(), None)?;
+        matches.insert_one(doc.clone(), None).await?;
 
         match &game {
             None => Ok(-1),
