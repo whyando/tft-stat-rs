@@ -10,7 +10,7 @@ edition = "2018"
 async-std = "*"
 futures = "=0.3.3"
 riven = "1.3.0"
-tokio = { version = "*", features = ["macros"]}
+tokio = { version = "*", features = ["macros", "time"]}
 log = "*"
 env_logger = "*"
 anyhow = "*"

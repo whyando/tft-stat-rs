@@ -21,16 +21,20 @@ mod promise_buffer;
 #[tokio::main]
 async fn main() -> () {
     env_logger::init();
-
-    let db_connection_string = std::env::var("DB_CONNECTION_STRING").expect("Missing environment variable: DB_CONNECTION_STRING");
-    let api_key = std::env::var("RGAPI_KEY").expect("Missing environment variable: RGAPI_KEY");
-    let api_config = RiotApiConfig::with_key(api_key).preconfig_throughput();
-    let api = Arc::new(RiotApi::with_config(api_config));
     
-    let mut client_options = ClientOptions::parse(&db_connection_string).unwrap();
-    client_options.app_name = Some("tft_stat".to_string());
-    let client = Client::with_options(client_options).unwrap();
-    let db = Arc::new(client.database("tft"));
+    let api = {
+        let api_key = std::env::var("RGAPI_KEY").expect("Missing environment variable: RGAPI_KEY");
+        let api_config = RiotApiConfig::with_key(api_key).preconfig_throughput();
+        Arc::new(RiotApi::with_config(api_config))
+    };
+    
+    let db = {
+        let db_connection_string = std::env::var("DB_CONNECTION_STRING").expect("Missing environment variable: DB_CONNECTION_STRING");
+        let mut client_options = ClientOptions::parse(&db_connection_string).expect("Unable to parse DB options");
+        client_options.app_name = Some("tft_stat".to_string());
+        let client = Client::with_options(client_options).expect("Unable to construct DB client");
+        Arc::new(client.database("tft"))
+    };
     
     let m1 = Main {
         region: Region::NA,
@@ -98,6 +102,8 @@ impl Main {
         info!("[{}] Main Done.", self.region);
     }
 
+    /// Do all processing for a single summoner
+    /// Propagates up errors from database and api calls (but not match fetching errors)
     async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
         let player = self.api.tft_summoner_v1().get_by_summoner_id(self.region, id).await?;
         let player_match = self.api.tft_match_v1().get_match_ids_by_puuid(self.region_major, &player.puuid, Some(10)).await?;
@@ -140,16 +146,14 @@ impl Main {
             }
         };
 
-        
-
         let mut game_json = match &game {
             None => json!({}),
-            Some(g) =>  serde_json::to_value(g).unwrap()
+            Some(g) =>  serde_json::to_value(g)?
         };
         game_json["_id"] = json!(id);
         let bson: bson::Bson = game_json.into();
 
-        let doc = bson.as_document().unwrap();
+        let doc = bson.as_document().ok_or_else(|| anyhow::Error::msg("Error creating mongo doc"))?;
         matches.insert_one(doc.clone(), None)?;
 
         match &game {
@@ -170,34 +174,44 @@ impl Main {
             // ("DIAMOND", "III"),
             // ("DIAMOND", "IV"),
         ] {
-            let mut x = self.get_league_entries(tier, division).await;
-            info!("{} {} {}\t{}", self.region, tier, division, x.len());
-            ret.append(&mut x);
+            let mut entries = {
+                let mut x = self.get_league_entries(tier, division).await;
+                let mut num_failures: i32 = 0;
+                while let Err(e) = &x {
+                    error!("Error get_league_entries {} {}: {}", tier, division, e);
+                    num_failures += 1;
+                    if num_failures == 5 {
+                        break;
+                    }
+                    tokio::time::delay_for(std::time::Duration::from_secs(20)).await;
+                    x = self.get_league_entries(tier, division).await;
+                }
+                x.expect("Too many failures")
+            };
+            info!("{} {} {}\t{}", self.region, tier, division, entries.len());
+            ret.append(&mut entries);
         }
         ret
     }
     
-    async fn get_league_entries(&self, tier: &str, division: &str) -> Vec<String> {
-        // special cases
+    async fn get_league_entries(&self, tier: &str, division: &str) -> anyhow::Result<Vec<String>> {
+        // non-paginated cases
         let x: Option<LeagueList> = match tier {
-            "CHALLENGER" => Some(self.api.tft_league_v1().get_challenger_league(self.region).await
-                .expect("get_challenger_league failed")),
-            "GRANDMASTER" => Some(self.api.tft_league_v1().get_grandmaster_league(self.region).await
-                .expect("get_grandmaster_league failed")),
-            "MASTER" => Some(self.api.tft_league_v1().get_master_league(self.region).await
-                .expect("get_master_league failed")),
+            "CHALLENGER" => Some(self.api.tft_league_v1().get_challenger_league(self.region).await?),
+            "GRANDMASTER" => Some(self.api.tft_league_v1().get_grandmaster_league(self.region).await?),
+            "MASTER" => Some(self.api.tft_league_v1().get_master_league(self.region).await?),
             _ => None,
         };
-        if !x.is_none() {
-            let x = x.unwrap();
-            return x.entries.iter().map(|y| y.summoner_id.clone()).collect();
+        if let Some(ll) = x {
+            let summoner_id_list = ll.entries.iter().map(|y| y.summoner_id.clone()).collect();
+            return Ok(summoner_id_list);
         }
-    
+
+        // paginated cases
         let mut page = 1;
         let mut ret = Vec::new();
         loop {
-            let x = self.api.tft_league_v1().get_league_entries(self.region, tier, division, Some(page)).await
-                .expect("get_league_entries failed");        
+            let x = self.api.tft_league_v1().get_league_entries(self.region, tier, division, Some(page)).await?;
             if x.len() == 0 { break };
     
             for y in x {
@@ -205,7 +219,7 @@ impl Main {
             }
             page+=1;
         }
-        ret 
+        Ok(ret)
     }
 }
 

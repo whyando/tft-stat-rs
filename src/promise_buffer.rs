@@ -4,6 +4,7 @@ use core::future::Future;
 
 use std::collections::VecDeque;
 
+/// Generic to take a list of promises and execute all with a specific level of parrallelism
 pub async fn promise_buffer<'a,T,F>(mut q: VecDeque<Pin<Box<dyn Future<Output = T> + std::marker::Send + 'a>>>, sz: usize, mut on_result: F)
 -> () 
     where F: FnMut(T) -> ()
