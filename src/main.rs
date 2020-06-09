@@ -203,9 +203,11 @@ impl Main {
             ("GRANDMASTER", "I"),
             ("MASTER", "I"),
             ("DIAMOND", "I"),
-            // ("DIAMOND", "II"),
-            // ("DIAMOND", "III"),
-            // ("DIAMOND", "IV"),
+            ("DIAMOND", "II"),
+            ("DIAMOND", "III"),
+            ("DIAMOND", "IV"),
+            ("PLATINUM", "I"),
+            ("PLATINUM", "II"),
         ] {
             let mut entries = {
                 let mut x = self.get_league_entries(tier, division).await;
