@@ -59,24 +59,19 @@ async fn main() -> () {
         api: api.clone(),
         db: db.clone(),
     };
-    let s1 = tokio::spawn(async move {
-        loop {
-            m1.do_cycle().await;
-        }
-    });
-    let s2 = tokio::spawn(async move {
-        loop {
-            m2.do_cycle().await;
-        }
-    });
-    let s3 = tokio::spawn(async move {
-        loop {
-            m3.do_cycle().await;
-        }
-    });
-    s1.await.expect("The task being joined has panicked");
-    s2.await.expect("The task being joined has panicked");
-    s3.await.expect("The task being joined has panicked");
+    let m4 = Main {
+        region: Region::JP,
+        region_major: Region::ASIA,
+        api: api.clone(),
+        db: db.clone(),
+    };
+    let m5 = Main {
+        region: Region::BR,
+        region_major: Region::AMERICAS,
+        api: api.clone(),
+        db: db.clone(),
+    };
+    futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run());
 }
 
 struct Main {
@@ -87,6 +82,13 @@ struct Main {
 }
 
 impl Main {
+    // run forever
+    async fn run(&self) {
+        loop {
+            self.do_cycle().await;
+        }
+    }
+
     async fn do_cycle(&self) {
         info!("[{}] Main begin.", self.region);
         let summoner_list = self.get_top_players().await;
@@ -205,9 +207,9 @@ impl Main {
             ("DIAMOND", "I"),
             ("DIAMOND", "II"),
             ("DIAMOND", "III"),
-            ("DIAMOND", "IV"),
-            ("PLATINUM", "I"),
-            ("PLATINUM", "II"),
+            // ("DIAMOND", "IV"),
+            // ("PLATINUM", "I"),
+            // ("PLATINUM", "II"),
         ] {
             let mut entries = {
                 let mut x = self.get_league_entries(tier, division).await;
