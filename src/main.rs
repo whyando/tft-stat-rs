@@ -1,11 +1,12 @@
 #[macro_use]
 extern crate log;
-use bson;
-use bson::doc;
 use futures::future::FutureExt;
+use mongodb::bson;
+use mongodb::bson::doc;
 use serde_json;
 use serde_json::json;
 use std::collections::VecDeque;
+use std::convert::TryInto;
 use std::iter::Iterator;
 use std::sync::Arc;
 use tokio;
@@ -184,7 +185,7 @@ impl Main {
             Some(g) => serde_json::to_value(g)?,
         };
         game_json["_id"] = json!(id);
-        let bson: bson::Bson = game_json.into();
+        let bson: bson::Bson = game_json.try_into()?;
 
         let doc = bson
             .as_document()
