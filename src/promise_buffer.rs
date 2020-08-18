@@ -1,11 +1,9 @@
 use core::future::Future;
-use core::pin::Pin;
-
 use std::collections::VecDeque;
 
 /// Generic to take a list of promises and execute all with a specific level of parrallelism
-pub async fn promise_buffer<'a, T, F>(
-    mut q: VecDeque<Pin<Box<dyn Future<Output = T> + std::marker::Send + 'a>>>,
+pub async fn promise_buffer<T, F>(
+    mut q: VecDeque<impl Future<Output = T> + Unpin>,
     sz: usize,
     mut on_result: F,
 ) -> ()
