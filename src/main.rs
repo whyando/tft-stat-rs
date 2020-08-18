@@ -11,8 +11,8 @@ use std::iter::Iterator;
 use std::sync::Arc;
 use tokio;
 
-use mongodb::options::FindOneOptions;
-use mongodb::{options::ClientOptions, Client};
+use mongodb::options::{ClientOptions, CountOptions};
+use mongodb::Client;
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use riven::{RiotApi, RiotApiConfig};
@@ -159,10 +159,10 @@ impl Main {
     async fn process_match_id(&self, id: &str) -> anyhow::Result<i64> {
         let matches = self.db.collection("matches_v2");
         let filter = doc! {"_id": id};
-        let find_options = FindOneOptions::default();
-        let doc = matches.find_one(filter, find_options).await?;
+        let count_options = CountOptions::default();
+        let num_doc = matches.count_documents(filter, count_options).await?;
 
-        if let Some(_) = doc {
+        if num_doc != 0 {
             return Ok(0);
         }
 
