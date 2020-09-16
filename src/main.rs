@@ -48,12 +48,12 @@ async fn main() -> () {
     //     api: api.clone(),
     //     db: db.clone(),
     // };
-    // let m2 = Main {
-    //     region: Region::EUW,
-    //     region_major: Region::EUROPE,
-    //     api: api.clone(),
-    //     db: db.clone(),
-    // };
+    let m2 = Main {
+        region: Region::EUW,
+        region_major: Region::EUROPE,
+        api: api.clone(),
+        db: db.clone(),
+    };
     let m3 = Main {
         region: Region::KR,
         region_major: Region::ASIA,
@@ -74,7 +74,7 @@ async fn main() -> () {
     // };
 
     // futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run());
-    futures::join!(m3.run());
+    futures::join!(m2.run(), m3.run());
 }
 
 struct Main {
