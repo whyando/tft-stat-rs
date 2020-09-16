@@ -42,37 +42,39 @@ async fn main() -> () {
         Arc::new(client.database("tft"))
     };
 
-    let m1 = Main {
-        region: Region::NA,
-        region_major: Region::AMERICAS,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m2 = Main {
-        region: Region::EUW,
-        region_major: Region::EUROPE,
-        api: api.clone(),
-        db: db.clone(),
-    };
+    // let m1 = Main {
+    //     region: Region::NA,
+    //     region_major: Region::AMERICAS,
+    //     api: api.clone(),
+    //     db: db.clone(),
+    // };
+    // let m2 = Main {
+    //     region: Region::EUW,
+    //     region_major: Region::EUROPE,
+    //     api: api.clone(),
+    //     db: db.clone(),
+    // };
     let m3 = Main {
         region: Region::KR,
         region_major: Region::ASIA,
         api: api.clone(),
         db: db.clone(),
     };
-    let m4 = Main {
-        region: Region::JP,
-        region_major: Region::ASIA,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m5 = Main {
-        region: Region::BR,
-        region_major: Region::AMERICAS,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run());
+    // let m4 = Main {
+    //     region: Region::JP,
+    //     region_major: Region::ASIA,
+    //     api: api.clone(),
+    //     db: db.clone(),
+    // };
+    // let m5 = Main {
+    //     region: Region::BR,
+    //     region_major: Region::AMERICAS,
+    //     api: api.clone(),
+    //     db: db.clone(),
+    // };
+
+    // futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run());
+    futures::join!(m3.run());
 }
 
 struct Main {
@@ -202,15 +204,24 @@ impl Main {
         let mut ret = Vec::new();
 
         for (tier, division) in &[
-            ("CHALLENGER", "I"),
-            ("GRANDMASTER", "I"),
-            ("MASTER", "I"),
+            // ("CHALLENGER", "I"),
+            // ("GRANDMASTER", "I"),
+            // ("MASTER", "I"),
             ("DIAMOND", "I"),
             ("DIAMOND", "II"),
             ("DIAMOND", "III"),
-            // ("DIAMOND", "IV"),
-            // ("PLATINUM", "I"),
-            // ("PLATINUM", "II"),
+            ("DIAMOND", "IV"),
+            ("PLATINUM", "I"),
+            ("PLATINUM", "II"),
+            ("PLATINUM", "III"),
+            ("PLATINUM", "IV"),
+            ("GOLD", "I"),
+            ("GOLD", "II"),
+            ("GOLD", "III"),
+            ("GOLD", "IV"),
+            ("SILVER", "I"),
+            ("SILVER", "II"),
+            ("SILVER", "III"),
         ] {
             let mut entries = {
                 let mut x = self.get_league_entries(tier, division).await;
