@@ -1,9 +1,12 @@
+#![type_length_limit = "3104818"]
 #[macro_use]
 extern crate log;
+
 use chrono::offset::TimeZone;
 use chrono::offset::Utc;
 use chrono::Duration;
-use futures::future::FutureExt;
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
 use mongodb::bson::doc;
 use mongodb::bson::Bson;
 use serde_json;
@@ -18,10 +21,6 @@ use mongodb::Client;
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use riven::{RiotApi, RiotApiConfig};
-
-use promise_buffer::promise_buffer;
-
-mod promise_buffer;
 
 const MATCHES_COLLECTION_NAME: &str = "matches_v3";
 
@@ -105,36 +104,54 @@ impl Main {
         );
 
         // VecDeque of Futures
-        let q: VecDeque<_> = summoner_list
+        let mut q: VecDeque<_> = summoner_list
             .iter()
             .enumerate()
-            .map(|(index, id)| self.process_summoner_id(index, id).boxed())
+            //.map(|(index, id)| self.process_summoner_id(index, id)) //.boxed())
             .collect();
 
-        promise_buffer(q, 1, |result| match result {
-            Ok(_) => {}
-            Err(e) => {
-                error!("{:#?}", e);
+        let mut futures = FuturesUnordered::new();
+        loop {
+            if q.is_empty() && futures.is_empty() {
+                break;
             }
-        })
-        .await;
+            if !q.is_empty() && futures.len() < 3 {
+                futures.push(
+                    q.pop_front()
+                        .map(|(index, id)| self.process_summoner_id(index, id))
+                        .unwrap(),
+                );
+            }
+            match futures.next().await {
+                Some(_ret) => (),
+                None => break,
+            }
+        }
 
         info!("[{}] Main Done.", self.region);
     }
 
     /// Do all processing for a single summoner
     /// Propagates up errors from database and api calls (but not match fetching errors)
-    async fn process_summoner_id(&self, index: usize, id: &str) -> anyhow::Result<()> {
+    async fn process_summoner_id(&self, index: usize, id: &str) {
         let player = self
             .api
             .tft_summoner_v1()
             .get_by_summoner_id(self.region, id)
-            .await?;
+            .await;
+        let player = match player {
+            Ok(player) => player,
+            Err(e) => return error!("tft_summoner_v1 error: {}", e.to_string()),
+        };
         let player_match = self
             .api
             .tft_match_v1()
             .get_match_ids_by_puuid(self.region_major, &player.puuid, Some(10))
-            .await?;
+            .await;
+        let player_match = match player_match {
+            Ok(player_match) => player_match,
+            Err(e) => return error!("tft_match_v1 error: {}", e.to_string()),
+        };
 
         let mut new: i32 = 0;
         let mut repeat: i32 = 0;
@@ -158,7 +175,6 @@ impl Main {
             repeat,
             new_error
         );
-        Ok(())
     }
 
     async fn process_match_id(&self, id: &str) -> anyhow::Result<i64> {
