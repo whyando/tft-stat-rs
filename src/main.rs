@@ -1,10 +1,12 @@
 #[macro_use]
 extern crate log;
+use chrono::offset::TimeZone;
+use chrono::offset::Utc;
+use chrono::Duration;
 use futures::future::FutureExt;
-use mongodb::bson;
 use mongodb::bson::doc;
+use mongodb::bson::Bson;
 use serde_json;
-use serde_json::json;
 use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::iter::Iterator;
@@ -20,6 +22,8 @@ use riven::{RiotApi, RiotApiConfig};
 use promise_buffer::promise_buffer;
 
 mod promise_buffer;
+
+const MATCHES_COLLECTION_NAME: &str = "matches_v3";
 
 #[tokio::main]
 async fn main() -> () {
@@ -158,7 +162,7 @@ impl Main {
     }
 
     async fn process_match_id(&self, id: &str) -> anyhow::Result<i64> {
-        let matches = self.db.collection("matches_v2");
+        let matches = self.db.collection(MATCHES_COLLECTION_NAME);
         let filter = doc! {"_id": id};
         let count_options = CountOptions::default();
         let num_doc = matches.count_documents(filter, count_options).await?;
@@ -167,35 +171,49 @@ impl Main {
             return Ok(0);
         }
 
-        let game = match self
+        let current_timestamp = Utc::now();
+        match self
             .api
             .tft_match_v1()
             .get_match(self.region_major, id)
             .await
-        {
-            Ok(g) => g,
-            Err(e) => {
+            .unwrap_or_else(|e| {
                 // let req_err = e.source_reqwest_error().to_string();
                 error!("Error on GET_MATCH({},{}): {}", self.region_major, id, e);
                 None
+            }) {
+            Some(game) => {
+                let match_timestamp = Utc.timestamp_millis(game.info.game_datetime);
+                let mut bson: Bson = serde_json::to_value(game)?.try_into()?;
+                let doc = bson
+                    .as_document_mut()
+                    .ok_or_else(|| anyhow::Error::msg("BSON is not a doc"))?;
+                doc.insert("_id", Bson::String(id.to_string()));
+                doc.insert("_documentCreated", Bson::DateTime(current_timestamp));
+                doc.insert("_matchTimestamp", Bson::DateTime(match_timestamp));
+                // Don't expire this document until the game date was 7 days ago
+                // Additionally don't expire within the next 24 hours
+                let expire = std::cmp::max(
+                    current_timestamp + Duration::hours(24),
+                    match_timestamp + Duration::days(7),
+                );
+                doc.insert("_documentExpire", Bson::DateTime(expire));
+                matches.insert_one(doc.clone(), None).await?;
+                Ok(1)
             }
-        };
-
-        let mut game_json = match &game {
-            None => json!({}),
-            Some(g) => serde_json::to_value(g)?,
-        };
-        game_json["_id"] = json!(id);
-        let bson: bson::Bson = game_json.try_into()?;
-
-        let doc = bson
-            .as_document()
-            .ok_or_else(|| anyhow::Error::msg("Error creating mongo doc"))?;
-        matches.insert_one(doc.clone(), None).await?;
-
-        match &game {
-            None => Ok(-1),
-            Some(_) => Ok(1),
+            None => {
+                // Insert a dummy document, so we don't keep trying to fetch this game
+                let mut doc = doc! {};
+                doc.insert("_id", Bson::String(id.to_string()));
+                doc.insert("_documentCreated", Bson::DateTime(current_timestamp));
+                // Expire document 24 hours after creation
+                doc.insert(
+                    "_documentExpire",
+                    Bson::DateTime(current_timestamp + Duration::hours(24)),
+                );
+                matches.insert_one(doc.clone(), None).await?;
+                Ok(-1)
+            }
         }
     }
 
