@@ -42,12 +42,12 @@ async fn main() -> () {
         Arc::new(client.database("tft"))
     };
 
-    // let m1 = Main {
-    //     region: Region::NA,
-    //     region_major: Region::AMERICAS,
-    //     api: api.clone(),
-    //     db: db.clone(),
-    // };
+    let m1 = Main {
+        region: Region::NA,
+        region_major: Region::AMERICAS,
+        api: api.clone(),
+        db: db.clone(),
+    };
     let m2 = Main {
         region: Region::EUW,
         region_major: Region::EUROPE,
@@ -60,21 +60,20 @@ async fn main() -> () {
         api: api.clone(),
         db: db.clone(),
     };
-    // let m4 = Main {
-    //     region: Region::JP,
-    //     region_major: Region::ASIA,
-    //     api: api.clone(),
-    //     db: db.clone(),
-    // };
-    // let m5 = Main {
-    //     region: Region::BR,
-    //     region_major: Region::AMERICAS,
-    //     api: api.clone(),
-    //     db: db.clone(),
-    // };
+    let m4 = Main {
+        region: Region::JP,
+        region_major: Region::ASIA,
+        api: api.clone(),
+        db: db.clone(),
+    };
+    let m5 = Main {
+        region: Region::BR,
+        region_major: Region::AMERICAS,
+        api: api.clone(),
+        db: db.clone(),
+    };
 
-    // futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run());
-    futures::join!(m2.run(), m3.run());
+    futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run());
 }
 
 struct Main {
@@ -217,11 +216,11 @@ impl Main {
             ("PLATINUM", "IV"),
             ("GOLD", "I"),
             ("GOLD", "II"),
-            ("GOLD", "III"),
-            ("GOLD", "IV"),
-            ("SILVER", "I"),
-            ("SILVER", "II"),
-            ("SILVER", "III"),
+            // ("GOLD", "III"),
+            // ("GOLD", "IV"),
+            // ("SILVER", "I"),
+            // ("SILVER", "II"),
+            // ("SILVER", "III"),
         ] {
             let mut entries = {
                 let mut x = self.get_league_entries(tier, division).await;
