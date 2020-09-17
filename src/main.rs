@@ -234,7 +234,7 @@ impl Main {
             ("PLATINUM", "IV"),
             ("GOLD", "I"),
             ("GOLD", "II"),
-            // ("GOLD", "III"),
+            ("GOLD", "III"),
             // ("GOLD", "IV"),
             // ("SILVER", "I"),
             // ("SILVER", "II"),
