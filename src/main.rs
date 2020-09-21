@@ -22,7 +22,7 @@ use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use riven::{RiotApi, RiotApiConfig};
 
-const MATCHES_COLLECTION_NAME: &str = "matches_v3";
+const MATCHES_COLLECTION_NAME: &str = "matches-3-3";
 
 #[tokio::main]
 async fn main() -> () {
@@ -239,18 +239,18 @@ impl Main {
         for (tier, division) in &[
             // ("CHALLENGER", "I"),
             // ("GRANDMASTER", "I"),
-            // ("MASTER", "I"),
+            ("MASTER", "I"),
             ("DIAMOND", "I"),
             ("DIAMOND", "II"),
             ("DIAMOND", "III"),
             ("DIAMOND", "IV"),
-            ("PLATINUM", "I"),
-            ("PLATINUM", "II"),
-            ("PLATINUM", "III"),
-            ("PLATINUM", "IV"),
-            ("GOLD", "I"),
-            ("GOLD", "II"),
-            ("GOLD", "III"),
+            // ("PLATINUM", "I"),
+            // ("PLATINUM", "II"),
+            // ("PLATINUM", "III"),
+            // ("PLATINUM", "IV"),
+            // ("GOLD", "I"),
+            // ("GOLD", "II"),
+            // ("GOLD", "III"),
             // ("GOLD", "IV"),
             // ("SILVER", "I"),
             // ("SILVER", "II"),
