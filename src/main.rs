@@ -75,8 +75,20 @@ async fn main() -> () {
         api: api.clone(),
         db: db.clone(),
     };
+    let m6 = Main {
+        region: Region::EUNE,
+        region_major: Region::EUROPE,
+        api: api.clone(),
+        db: db.clone(),
+    };
+    let m7 = Main {
+        region: Region::OCE,
+        region_major: Region::AMERICAS,
+        api: api.clone(),
+        db: db.clone(),
+    };
 
-    futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run());
+    futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run(), m6.run(), m7.run());
 }
 
 struct Main {
@@ -237,13 +249,13 @@ impl Main {
         let mut ret = Vec::new();
 
         for (tier, division) in &[
-            // ("CHALLENGER", "I"),
-            // ("GRANDMASTER", "I"),
+            ("CHALLENGER", "I"),
+            ("GRANDMASTER", "I"),
             ("MASTER", "I"),
             ("DIAMOND", "I"),
             ("DIAMOND", "II"),
-            ("DIAMOND", "III"),
-            ("DIAMOND", "IV"),
+            // ("DIAMOND", "III"),
+            // ("DIAMOND", "IV"),
             // ("PLATINUM", "I"),
             // ("PLATINUM", "II"),
             // ("PLATINUM", "III"),
