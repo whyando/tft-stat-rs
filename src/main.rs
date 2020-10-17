@@ -1,4 +1,4 @@
-#![type_length_limit = "3104818"]
+#![type_length_limit = "31048180"]
 #[macro_use]
 extern crate log;
 
@@ -89,27 +89,15 @@ async fn main() -> () {
         api: api.clone(),
         db: db.clone(),
     };
-    tokio::spawn(async move {
-        m1.run().await;
-    });
-    tokio::spawn(async move {
-        m2.run().await;
-    });
-    tokio::spawn(async move {
-        m3.run().await;
-    });
-    tokio::spawn(async move {
-        m4.run().await;
-    });
-    tokio::spawn(async move {
-        m5.run().await;
-    });
-    tokio::spawn(async move {
-        m6.run().await;
-    });
-    tokio::spawn(async move {
-        m7.run().await;
-    });
+    tokio::join!(
+        m1.run(),
+        m2.run(),
+        m3.run(),
+        m4.run(),
+        m5.run(),
+        m6.run(),
+        m7.run()
+    );
 }
 
 #[derive(Clone)]
@@ -137,12 +125,7 @@ impl Main {
             summoner_list.len()
         );
 
-        // VecDeque of Futures
-        let mut q: VecDeque<_> = summoner_list
-            .iter()
-            .enumerate()
-            //.map(|(index, id)| self.process_summoner_id(index, id)) //.boxed())
-            .collect();
+        let mut q: VecDeque<(usize, &String)> = summoner_list.iter().enumerate().collect();
 
         let mut futures = FuturesUnordered::new();
         loop {
@@ -215,7 +198,10 @@ impl Main {
         let matches = self.db.collection(MATCHES_COLLECTION_NAME);
         let filter = doc! {"_id": id};
         let count_options = CountOptions::default();
-        let num_doc = matches.count_documents(filter, count_options).await?;
+        let num_doc = matches
+            .count_documents(filter, count_options)
+            .await
+            .map_err(|_| anyhow::Error::msg("Error counting documents"))?;
 
         if num_doc != 0 {
             return Ok(0);
@@ -256,7 +242,10 @@ impl Main {
                 doc.insert("_aggregatedPlayerInfo", player_data);
                 doc.insert("_avgElo", avg_elo);
 
-                matches.insert_one(doc.clone(), None).await?;
+                matches
+                    .insert_one(doc.clone(), None)
+                    .await
+                    .map_err(|_| anyhow::Error::msg("Error inserting document"))?;
                 Ok(1)
             }
             None => {
@@ -269,7 +258,10 @@ impl Main {
                     "_documentExpire",
                     Bson::DateTime(current_timestamp + Duration::hours(24)),
                 );
-                matches.insert_one(doc.clone(), None).await?;
+                matches
+                    .insert_one(doc.clone(), None)
+                    .await
+                    .map_err(|_| anyhow::Error::msg("Error inserting document"))?;
                 Ok(-1)
             }
         }
@@ -287,12 +279,18 @@ impl Main {
             trace!("puuid {:?}", puuid);
 
             // 2. get 8 summonerIds (cached or riot query)
-            let summoner_doc = self.tft_summoner_v1(puuid).await?;
+            let summoner_doc = self
+                .tft_summoner_v1(puuid)
+                .await
+                .map_err(|_| anyhow::Error::msg("Error tft_summoner_v1"))?;
             let summoner_id = summoner_doc.get_str("id")?;
             trace!("{}", summoner_id);
 
             // 3. get 8 tft league entries (cached or riot query)
-            let league_doc = self.tft_league_v1(summoner_id).await?;
+            let league_doc = self
+                .tft_league_v1(summoner_id)
+                .await
+                .map_err(|_| anyhow::Error::msg("Error tft_league_v1"))?;
             let tft_tier = league_doc.get_str("tier").unwrap_or("unranked");
             let tft_rank = league_doc.get_str("rank").unwrap_or("unranked");
             let tft_league_points = league_doc.get_i32("leaguePoints").unwrap_or(i32::MIN);
@@ -330,7 +328,11 @@ impl Main {
 
         let find_options = FindOneOptions::default();
         let current_timestamp = Utc::now();
-        let doc = match summoners.find_one(filter, find_options).await? {
+        let doc = match summoners
+            .find_one(filter, find_options)
+            .await
+            .map_err(|_| anyhow::Error::msg("Error find_one"))?
+        {
             None => {
                 let tft_summoner = self
                     .api
@@ -346,7 +348,10 @@ impl Main {
                 // Don't expire this document for 60 days
                 let expire = current_timestamp + Duration::days(30);
                 doc.insert("_documentExpire", Bson::DateTime(expire));
-                summoners.insert_one(doc.clone(), None).await?;
+                summoners
+                    .insert_one(doc.clone(), None)
+                    .await
+                    .map_err(|_| anyhow::Error::msg("Error inserting document"))?;
                 // debug!("summoner (new)");
                 doc.clone()
             }
@@ -365,7 +370,11 @@ impl Main {
 
         let find_options = FindOneOptions::default();
         let current_timestamp = Utc::now();
-        let doc = match leagues.find_one(filter, find_options).await? {
+        let doc = match leagues
+            .find_one(filter, find_options)
+            .await
+            .map_err(|_| anyhow::Error::msg("Error find one"))?
+        {
             None => {
                 let tft_league_vec = self
                     .api
@@ -395,7 +404,10 @@ impl Main {
                 // Don't expire this document for 1 days
                 let expire = current_timestamp + Duration::days(1);
                 doc.insert("_documentExpire", Bson::DateTime(expire));
-                leagues.insert_one(doc.clone(), None).await?;
+                leagues
+                    .insert_one(doc.clone(), None)
+                    .await
+                    .map_err(|_| anyhow::Error::msg("Error inserting document"))?;
                 doc
             }
             Some(doc) => {
@@ -488,7 +500,8 @@ impl Main {
                 .api
                 .tft_league_v1()
                 .get_league_entries(self.region, tier, division, Some(page))
-                .await?;
+                .await
+                .map_err(|_| anyhow::Error::msg("Error get_league_entries"))?;
             if x.len() == 0 {
                 break;
             };
