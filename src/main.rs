@@ -7,8 +7,8 @@ use chrono::offset::Utc;
 use chrono::Duration;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use mongodb::bson::doc;
-use mongodb::bson::Bson;
+use mongodb::bson::document::Document;
+use mongodb::bson::{doc, Bson};
 use serde_json;
 use std::collections::VecDeque;
 use std::convert::TryInto;
@@ -16,13 +16,15 @@ use std::iter::Iterator;
 use std::sync::Arc;
 use tokio;
 
-use mongodb::options::{ClientOptions, CountOptions};
+use mongodb::options::{ClientOptions, CountOptions, FindOneOptions};
 use mongodb::Client;
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use riven::{RiotApi, RiotApiConfig};
 
-const MATCHES_COLLECTION_NAME: &str = "matches-3-3";
+const MATCHES_COLLECTION_NAME: &str = "matches-4-1";
+const SUMMONERS_COLLECTION_NAME: &str = "summoner-4-1";
+const LEAGUES_COLLECTION_NAME: &str = "league-4-1";
 
 #[tokio::main]
 async fn main() -> () {
@@ -87,10 +89,30 @@ async fn main() -> () {
         api: api.clone(),
         db: db.clone(),
     };
-
-    futures::join!(m1.run(), m2.run(), m3.run(), m4.run(), m5.run(), m6.run(), m7.run());
+    tokio::spawn(async move {
+        m1.run().await;
+    });
+    tokio::spawn(async move {
+        m2.run().await;
+    });
+    tokio::spawn(async move {
+        m3.run().await;
+    });
+    tokio::spawn(async move {
+        m4.run().await;
+    });
+    tokio::spawn(async move {
+        m5.run().await;
+    });
+    tokio::spawn(async move {
+        m6.run().await;
+    });
+    tokio::spawn(async move {
+        m7.run().await;
+    });
 }
 
+#[derive(Clone)]
 struct Main {
     api: Arc<RiotApi>,
     region: Region,
@@ -127,7 +149,7 @@ impl Main {
             if q.is_empty() && futures.is_empty() {
                 break;
             }
-            if !q.is_empty() && futures.len() < 3 {
+            if !q.is_empty() && futures.len() < 5 {
                 futures.push(
                     q.pop_front()
                         .map(|(index, id)| self.process_summoner_id(index, id))
@@ -200,6 +222,7 @@ impl Main {
         }
 
         let current_timestamp = Utc::now();
+        // Fetch details of the match
         match self
             .api
             .tft_match_v1()
@@ -211,6 +234,9 @@ impl Main {
                 None
             }) {
             Some(game) => {
+                // Get information about the participants in this game
+                let (player_data, avg_elo) = self.get_extended_participant_info(&game).await?;
+
                 let match_timestamp = Utc.timestamp_millis(game.info.game_datetime);
                 let mut bson: Bson = serde_json::to_value(game)?.try_into()?;
                 let doc = bson
@@ -226,6 +252,10 @@ impl Main {
                     match_timestamp + Duration::days(7),
                 );
                 doc.insert("_documentExpire", Bson::DateTime(expire));
+
+                doc.insert("_aggregatedPlayerInfo", player_data);
+                doc.insert("_avgElo", avg_elo);
+
                 matches.insert_one(doc.clone(), None).await?;
                 Ok(1)
             }
@@ -245,6 +275,139 @@ impl Main {
         }
     }
 
+    async fn get_extended_participant_info(
+        &self,
+        game: &riven::models::tft_match_v1::Match,
+    ) -> anyhow::Result<(Vec<Bson>, i32)> {
+        let mut ret: Vec<Bson> = vec![];
+        let mut sum = 0;
+        let mut num_ranked = 0;
+        for puuid in &game.metadata.participants {
+            // 1. parse 8 puuids
+            trace!("puuid {:?}", puuid);
+
+            // 2. get 8 summonerIds (cached or riot query)
+            let summoner_doc = self.tft_summoner_v1(puuid).await?;
+            let summoner_id = summoner_doc.get_str("id")?;
+            trace!("{}", summoner_id);
+
+            // 3. get 8 tft league entries (cached or riot query)
+            let league_doc = self.tft_league_v1(summoner_id).await?;
+            let tft_tier = league_doc.get_str("tier").unwrap_or("unranked");
+            let tft_rank = league_doc.get_str("rank").unwrap_or("unranked");
+            let tft_league_points = league_doc.get_i32("leaguePoints").unwrap_or(i32::MIN);
+
+            // 4. construct object to append to the game with all known info
+            let aggregated_doc = doc! {
+                "summonerId": summoner_id,
+                "summonerName": summoner_doc.get_str("name")?,
+                "accountId": summoner_doc.get_str("accountId")?,
+                "puuid": puuid,
+                "tftTier": tft_tier,
+                "tftRank": tft_rank,
+                "tftLeaguePoints": tft_league_points,
+
+            };
+            ret.push(aggregated_doc.into());
+
+            let league_status = league_doc.get_str("_status")?;
+            if league_status == "ranked" {
+                sum += league_to_numeric(tft_tier, tft_rank, tft_league_points);
+                num_ranked += 1;
+            }
+        }
+        let avg_elo = match num_ranked {
+            8 => sum / num_ranked,
+            _ => i32::MIN,
+        };
+        Ok((ret, avg_elo))
+    }
+
+    // puuid -> summoner doc
+    async fn tft_summoner_v1(&self, puuid: &str) -> anyhow::Result<Document> {
+        let summoners = self.db.collection(SUMMONERS_COLLECTION_NAME);
+        let filter = doc! {"_id": puuid};
+
+        let find_options = FindOneOptions::default();
+        let current_timestamp = Utc::now();
+        let doc = match summoners.find_one(filter, find_options).await? {
+            None => {
+                let tft_summoner = self
+                    .api
+                    .tft_summoner_v1()
+                    .get_by_puuid(self.region, puuid)
+                    .await?;
+                let mut bson: Bson = serde_json::to_value(tft_summoner)?.try_into()?;
+                let doc = bson
+                    .as_document_mut()
+                    .ok_or_else(|| anyhow::Error::msg("BSON is not a doc"))?;
+                doc.insert("_id", Bson::String(puuid.to_string()));
+                doc.insert("_documentCreated", Bson::DateTime(current_timestamp));
+                // Don't expire this document for 60 days
+                let expire = current_timestamp + Duration::days(30);
+                doc.insert("_documentExpire", Bson::DateTime(expire));
+                summoners.insert_one(doc.clone(), None).await?;
+                // debug!("summoner (new)");
+                doc.clone()
+            }
+            Some(doc) => {
+                // debug!("summoner (cached)");
+                doc
+            }
+        };
+        Ok(doc)
+    }
+
+    // summonerId -> league doc
+    async fn tft_league_v1(&self, summoner_id: &str) -> anyhow::Result<Document> {
+        let leagues = self.db.collection(LEAGUES_COLLECTION_NAME);
+        let filter = doc! {"_id": summoner_id};
+
+        let find_options = FindOneOptions::default();
+        let current_timestamp = Utc::now();
+        let doc = match leagues.find_one(filter, find_options).await? {
+            None => {
+                let tft_league_vec = self
+                    .api
+                    .tft_league_v1()
+                    .get_league_entries_for_summoner(self.region, summoner_id)
+                    .await?;
+                #[allow(deprecated)] // riven::consts::QueueType::RANKED_TFT is marked deprecated
+                let tft_league_opt = tft_league_vec
+                    .iter()
+                    .find(|item| item.queue_type == riven::consts::QueueType::RANKED_TFT);
+                let mut doc = if let Some(tft_league) = tft_league_opt {
+                    // debug!("leagues (found)");
+                    let mut bson: Bson = serde_json::to_value(tft_league)?.try_into()?;
+                    let doc = bson
+                        .as_document_mut()
+                        .ok_or_else(|| anyhow::Error::msg("BSON is not a doc"))?;
+                    doc.insert("_status", Bson::String("ranked".to_string()));
+                    doc.clone()
+                } else {
+                    // debug!("leagues (not found)");
+                    let mut doc = doc! {};
+                    doc.insert("_status", Bson::String("unranked".to_string()));
+                    doc
+                };
+                doc.insert("_id", Bson::String(summoner_id.to_string()));
+                doc.insert("_documentCreated", Bson::DateTime(current_timestamp));
+                // Don't expire this document for 1 days
+                let expire = current_timestamp + Duration::days(1);
+                doc.insert("_documentExpire", Bson::DateTime(expire));
+                leagues.insert_one(doc.clone(), None).await?;
+                doc
+            }
+            Some(doc) => {
+                // debug!("leagues (cached)");
+                doc
+            }
+        };
+        // debug!("{:}", doc);
+        Ok(doc)
+    }
+
+    // Returns a list of summoner ids
     async fn get_top_players(&self) -> Vec<String> {
         let mut ret = Vec::new();
 
@@ -288,6 +451,7 @@ impl Main {
         ret
     }
 
+    // Returns a list of summoner ids
     async fn get_league_entries(&self, tier: &str, division: &str) -> anyhow::Result<Vec<String>> {
         // non-paginated cases
         let x: Option<LeagueList> = match tier {
@@ -329,11 +493,62 @@ impl Main {
                 break;
             };
 
+            // Here we have the list of entries, which we distill down to a list of summoner ids
             for y in x {
                 ret.push(y.summoner_id.clone());
+                /*
+                globally we know:
+                    tier = "PLATINUM"
+                    division="I"
+
+                for this specific entry:
+                    y.leaguePoints="266"
+                    y.rank="I" (same as above I hope)
+
+                identity:
+                    y.summonerId
+                    y.summonerName
+                    NOT: puuid or accountId
+                */
+                // We may want to use this ranking to update DB knowledge about this player
+                // (it is indexed on summonerId)
             }
             page += 1;
         }
         Ok(ret)
     }
 }
+
+// Utility
+
+fn league_to_numeric(tier: &str, rank: &str, league_points: i32) -> i32 {
+    let base = match tier {
+        "IRON" => 0,
+        "BRONZE" => 400,
+        "SILVER" => 800,
+        "GOLD" => 1200,
+        "PLATINUM" => 1600,
+        "DIAMOND" => 2000,
+        "MASTER" => 2400,
+        "GRANDMASTER" => 2400,
+        "CHALLENGER" => 2400,
+        _ => panic!(),
+    };
+    let rank_addition = if !(tier == "MASTER" || tier == "GRANDMASTER" || tier == "CHALLENGER") {
+        match rank {
+            "IV" => 0,
+            "III" => 100,
+            "II" => 200,
+            "I" => 300,
+            _ => panic!(),
+        }
+    } else {
+        0
+    };
+    base + rank_addition + league_points
+}
+
+// One day...
+// fn numeric_to_league(x: i32) -> String {
+//     String::default()
+// }
