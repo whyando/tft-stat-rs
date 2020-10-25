@@ -24,7 +24,7 @@ use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use riven::{RiotApi, RiotApiConfig};
 
-use numeric_league_util::league_to_numeric;
+use numeric_league_util::{league_to_numeric, team_avg_rank_str};
 
 const MATCHES_COLLECTION_NAME: &str = "matches-4-1";
 const SUMMONERS_COLLECTION_NAME: &str = "summoner-4-1";
@@ -51,6 +51,7 @@ async fn main() -> () {
         Arc::new(client.database("tft"))
     };
 
+    // TODO: make regions configurable
     let m1 = Main {
         region: Region::NA,
         region_major: Region::AMERICAS,
@@ -225,7 +226,8 @@ impl Main {
             }) {
             Some(game) => {
                 // Get information about the participants in this game
-                let (player_data, avg_elo) = self.get_extended_participant_info(&game).await?;
+                let (player_data, avg_elo, avg_elo_text) =
+                    self.get_extended_participant_info(&game).await?;
 
                 let match_timestamp = Utc.timestamp_millis(game.info.game_datetime);
                 let mut bson: Bson = serde_json::to_value(game)?.try_into()?;
@@ -245,6 +247,7 @@ impl Main {
 
                 doc.insert("_aggregatedPlayerInfo", player_data);
                 doc.insert("_avgElo", avg_elo);
+                doc.insert("_avgEloText", avg_elo_text);
 
                 matches
                     .insert_one(doc.clone(), None)
@@ -274,10 +277,13 @@ impl Main {
     async fn get_extended_participant_info(
         &self,
         game: &riven::models::tft_match_v1::Match,
-    ) -> anyhow::Result<(Vec<Bson>, i32)> {
+    ) -> anyhow::Result<(Vec<Bson>, i32, String)> {
         let mut ret: Vec<Bson> = vec![];
         let mut sum = 0;
         let mut num_ranked = 0;
+
+        let mut ranks_vec = vec![];
+
         for puuid in &game.metadata.participants {
             // 1. parse 8 puuids
             trace!("puuid {:?}", puuid);
@@ -308,9 +314,9 @@ impl Main {
                 "tftTier": tft_tier,
                 "tftRank": tft_rank,
                 "tftLeaguePoints": tft_league_points,
-
             };
             ret.push(aggregated_doc.into());
+            ranks_vec.push((tft_tier, tft_rank, tft_league_points));
 
             let league_status = league_doc.get_str("_status")?;
             if league_status == "ranked" {
@@ -318,11 +324,12 @@ impl Main {
                 num_ranked += 1;
             }
         }
-        let avg_elo = match num_ranked {
-            8 => sum / num_ranked,
-            _ => i32::MIN,
+        let (avg_elo, avg_elo_str) = if num_ranked == 8 {
+            (sum / 8, team_avg_rank_str(&ranks_vec))
+        } else {
+            (i32::MIN, "UNRANKED".to_string())
         };
-        Ok((ret, avg_elo))
+        Ok((ret, avg_elo, avg_elo_str))
     }
 
     // puuid -> summoner doc
@@ -427,6 +434,7 @@ impl Main {
     async fn get_top_players(&self) -> Vec<String> {
         let mut ret = Vec::new();
 
+        // TODO: make divisions configurable
         for (tier, division) in &[
             ("CHALLENGER", "I"),
             ("GRANDMASTER", "I"),
