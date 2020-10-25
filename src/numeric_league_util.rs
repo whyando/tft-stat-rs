@@ -76,13 +76,14 @@ pub fn league_to_str(league: &str, rank: &str, lp: i32) -> String {
     format!("{} {} {}LP", league, rank, lp)
 }
 
+#[allow(dead_code)]
 pub fn elo_to_str(x: i32) -> String {
     let (tier, rank, league_points) = numeric_to_league(x);
     league_to_str(&tier, &rank, league_points)
 }
 
 // Given a list of players, return the average elo, in string form
-pub fn team_avg_rank_str(ranks: &Vec<(&str, &str, i32)>) -> String {
+pub fn team_avg_rank_str(ranks: &Vec<(String, String, i32)>) -> String {
     assert!(ranks.len() != 0);
     let mut sum = 0;
     for (tier, rank, league_points) in ranks {
@@ -96,7 +97,7 @@ pub fn team_avg_rank_str(ranks: &Vec<(&str, &str, i32)>) -> String {
         // CHALLENGER=3, GM=2, MASTER=1. Round to the closest.
         let mut sum = 0;
         for (tier, _, _) in ranks {
-            sum += match *tier {
+            sum += match tier.as_str() {
                 "CHALLENGER" => 3,
                 "GRANDMASTER" => 2,
                 "MASTER" => 1,
@@ -168,38 +169,38 @@ mod tests {
     #[test]
     fn test_team_avg_rank_str() {
         let ret = team_avg_rank_str(&vec![
-            ("CHALLENGER", "I", 1144),
-            ("CHALLENGER", "I", 653),
-            ("CHALLENGER", "I", 625),
-            ("GRANDMASTER", "I", 506),
-            ("GRANDMASTER", "I", 526),
-            ("MASTER", "I", 192),
-            ("MASTER", "I", 0),
-            ("DIAMOND", "II", 0),
+            ("CHALLENGER".to_string(), "I".to_string(), 1144),
+            ("CHALLENGER".to_string(), "I".to_string(), 653),
+            ("CHALLENGER".to_string(), "I".to_string(), 625),
+            ("GRANDMASTER".to_string(), "I".to_string(), 506),
+            ("GRANDMASTER".to_string(), "I".to_string(), 526),
+            ("MASTER".to_string(), "I".to_string(), 192),
+            ("MASTER".to_string(), "I".to_string(), 0),
+            ("DIAMOND".to_string(), "II".to_string(), 0),
         ]);
         assert_eq!(ret, "GRANDMASTER I 430LP");
 
         let ret = team_avg_rank_str(&vec![
-            ("GRANDMASTER", "I", 270),
-            ("MASTER", "I", 260),
-            ("MASTER", "I", 250),
-            ("GRANDMASTER", "I", 240),
-            ("MASTER", "I", 230),
-            ("MASTER", "I", 220),
-            ("MASTER", "I", 210),
-            ("MASTER", "I", 200),
+            ("GRANDMASTER".to_string(), "I".to_string(), 270),
+            ("MASTER".to_string(), "I".to_string(), 260),
+            ("MASTER".to_string(), "I".to_string(), 250),
+            ("GRANDMASTER".to_string(), "I".to_string(), 240),
+            ("MASTER".to_string(), "I".to_string(), 230),
+            ("MASTER".to_string(), "I".to_string(), 220),
+            ("MASTER".to_string(), "I".to_string(), 210),
+            ("MASTER".to_string(), "I".to_string(), 200),
         ]);
         assert_eq!(ret, "MASTER I 235LP");
 
         let ret = team_avg_rank_str(&vec![
-            ("CHALLENGER", "I", 570),
-            ("CHALLENGER", "I", 560),
-            ("CHALLENGER", "I", 550),
-            ("CHALLENGER", "I", 540),
-            ("GRANDMASTER", "I", 530),
-            ("GRANDMASTER", "I", 520),
-            ("GRANDMASTER", "I", 510),
-            ("GRANDMASTER", "I", 500),
+            ("CHALLENGER".to_string(), "I".to_string(), 570),
+            ("CHALLENGER".to_string(), "I".to_string(), 560),
+            ("CHALLENGER".to_string(), "I".to_string(), 550),
+            ("CHALLENGER".to_string(), "I".to_string(), 540),
+            ("GRANDMASTER".to_string(), "I".to_string(), 530),
+            ("GRANDMASTER".to_string(), "I".to_string(), 520),
+            ("GRANDMASTER".to_string(), "I".to_string(), 510),
+            ("GRANDMASTER".to_string(), "I".to_string(), 500),
         ]);
         assert_eq!(ret, "CHALLENGER I 535LP");
     }

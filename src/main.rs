@@ -305,6 +305,12 @@ impl Main {
             let tft_rank = league_doc.get_str("rank").unwrap_or("unranked");
             let tft_league_points = league_doc.get_i32("leaguePoints").unwrap_or(i32::MIN);
 
+            ranks_vec.push((
+                tft_tier.to_string(),
+                tft_rank.to_string(),
+                tft_league_points,
+            ));
+
             // 4. construct object to append to the game with all known info
             let aggregated_doc = doc! {
                 "summonerId": summoner_id,
@@ -316,7 +322,6 @@ impl Main {
                 "tftLeaguePoints": tft_league_points,
             };
             ret.push(aggregated_doc.into());
-            ranks_vec.push((tft_tier, tft_rank, tft_league_points));
 
             let league_status = league_doc.get_str("_status")?;
             if league_status == "ranked" {
