@@ -2,6 +2,8 @@
 #[macro_use]
 extern crate log;
 
+mod numeric_league_util;
+
 use chrono::offset::TimeZone;
 use chrono::offset::Utc;
 use chrono::Duration;
@@ -21,6 +23,8 @@ use mongodb::Client;
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use riven::{RiotApi, RiotApiConfig};
+
+use numeric_league_util::league_to_numeric;
 
 const MATCHES_COLLECTION_NAME: &str = "matches-4-1";
 const SUMMONERS_COLLECTION_NAME: &str = "summoner-4-1";
@@ -531,37 +535,3 @@ impl Main {
         Ok(ret)
     }
 }
-
-// Utility
-
-fn league_to_numeric(tier: &str, rank: &str, league_points: i32) -> i32 {
-    let base = match tier {
-        "IRON" => 0,
-        "BRONZE" => 400,
-        "SILVER" => 800,
-        "GOLD" => 1200,
-        "PLATINUM" => 1600,
-        "DIAMOND" => 2000,
-        "MASTER" => 2400,
-        "GRANDMASTER" => 2400,
-        "CHALLENGER" => 2400,
-        _ => panic!(),
-    };
-    let rank_addition = if !(tier == "MASTER" || tier == "GRANDMASTER" || tier == "CHALLENGER") {
-        match rank {
-            "IV" => 0,
-            "III" => 100,
-            "II" => 200,
-            "I" => 300,
-            _ => panic!(),
-        }
-    } else {
-        0
-    };
-    base + rank_addition + league_points
-}
-
-// One day...
-// fn numeric_to_league(x: i32) -> String {
-//     String::default()
-// }
