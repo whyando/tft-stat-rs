@@ -16,7 +16,7 @@ use std::convert::TryInto;
 use std::iter::Iterator;
 use std::sync::Arc;
 use tokio;
-use tokio::time::sleep;
+use tokio::time::delay_for as sleep;
 
 use mongodb::options::{ClientOptions, CountOptions, FindOneOptions};
 use mongodb::Client;
