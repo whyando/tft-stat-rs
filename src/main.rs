@@ -1,5 +1,3 @@
-// #![type_length_limit = "31048180"]
-#![type_length_limit = "1048576"]
 #[macro_use]
 extern crate log;
 
@@ -18,6 +16,7 @@ use std::convert::TryInto;
 use std::iter::Iterator;
 use std::sync::Arc;
 use tokio;
+use tokio::time::sleep;
 
 use mongodb::options::{ClientOptions, CountOptions, FindOneOptions};
 use mongodb::Client;
@@ -113,13 +112,15 @@ impl Main {
             if q.is_empty() && futures.is_empty() {
                 break;
             }
-            if !q.is_empty() && futures.len() < 5 {
+            while !q.is_empty() && futures.len() < 10 {
                 futures.push(
                     q.pop_front()
                         .map(|(index, id)| self.process_summoner_id(index, id))
                         .unwrap(),
                 );
+                sleep(tokio::time::Duration::from_millis(2000)).await;
             }
+
             match futures.next().await {
                 Some(_ret) => (),
                 None => break,
@@ -445,7 +446,7 @@ impl Main {
                     if num_failures == 5 {
                         break;
                     }
-                    tokio::time::delay_for(std::time::Duration::from_secs(20)).await;
+                    sleep(tokio::time::Duration::from_secs(20)).await;
                     x = self.get_league_entries(tier, division).await;
                 }
                 x.expect("Too many failures")
