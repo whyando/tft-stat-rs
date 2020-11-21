@@ -1,4 +1,5 @@
-#![type_length_limit = "31048180"]
+// #![type_length_limit = "31048180"]
+#![type_length_limit = "1048576"]
 #[macro_use]
 extern crate log;
 
@@ -51,58 +52,33 @@ async fn main() -> () {
         Arc::new(client.database("tft"))
     };
 
-    // TODO: make regions configurable
-    let m1 = Main {
-        region: Region::NA,
-        region_major: Region::AMERICAS,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m2 = Main {
-        region: Region::EUW,
-        region_major: Region::EUROPE,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m3 = Main {
-        region: Region::KR,
-        region_major: Region::ASIA,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m4 = Main {
-        region: Region::JP,
-        region_major: Region::ASIA,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m5 = Main {
-        region: Region::BR,
-        region_major: Region::AMERICAS,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m6 = Main {
-        region: Region::EUNE,
-        region_major: Region::EUROPE,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    let m7 = Main {
-        region: Region::OCE,
-        region_major: Region::AMERICAS,
-        api: api.clone(),
-        db: db.clone(),
-    };
-    tokio::join!(
-        m1.run(),
-        m2.run(),
-        m3.run(),
-        m4.run(),
-        m5.run(),
-        m6.run(),
-        m7.run()
-    );
+    let mut join_handles = vec![];
+
+    for (region, region_major) in &[
+        (Region::EUW, Region::EUROPE),
+        (Region::EUNE, Region::EUROPE),
+        (Region::KR, Region::ASIA),
+        (Region::JP, Region::ASIA),
+        (Region::NA, Region::AMERICAS),
+        (Region::BR, Region::AMERICAS),
+        (Region::OCE, Region::AMERICAS),
+    ] {
+        let api_clone = api.clone();
+        let db_clone = db.clone();
+        let hdl = tokio::spawn(async move {
+            Main {
+                region: *region,
+                region_major: *region_major,
+                api: api_clone,
+                db: db_clone,
+            }
+            .run()
+            .await;
+        });
+        join_handles.push(hdl);
+    }
+    let (_i, idx, _v) = futures::future::select_all(join_handles).await;
+    panic!(format!("Handle {} returned.", idx));
 }
 
 #[derive(Clone)]
