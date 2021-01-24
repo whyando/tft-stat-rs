@@ -84,7 +84,7 @@ pub fn elo_to_str(x: i32) -> String {
 
 // Given a list of players, return the average elo, in string form
 pub fn team_avg_rank_str(ranks: &[(String, String, i32)]) -> String {
-    assert!(ranks.is_empty());
+    assert!(!ranks.is_empty());
     let mut sum = 0;
     for (tier, rank, league_points) in ranks {
         sum += league_to_numeric(tier, rank, *league_points);
