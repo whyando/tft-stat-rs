@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate log;
-
 mod numeric_league_util;
 
 use chrono::offset::TimeZone;
@@ -8,19 +5,19 @@ use chrono::offset::Utc;
 use chrono::Duration;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
+use log::{debug, error, info, trace};
 use mongodb::bson::document::Document;
 use mongodb::bson::{doc, Bson};
-use std::collections::VecDeque;
-use std::convert::TryInto;
-use std::iter::Iterator;
-use std::sync::Arc;
-use tokio::time::delay_for as sleep;
-
 use mongodb::options::{ClientOptions, CountOptions, FindOneOptions};
 use mongodb::Client;
 use riven::consts::Region;
 use riven::models::tft_league_v1::LeagueList;
 use riven::{RiotApi, RiotApiConfig};
+use std::collections::VecDeque;
+use std::convert::TryInto;
+use std::iter::Iterator;
+use std::sync::Arc;
+use tokio::time::delay_for as sleep;
 
 use numeric_league_util::{league_to_numeric, team_avg_rank_str};
 
