@@ -10,12 +10,10 @@ use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use mongodb::bson::document::Document;
 use mongodb::bson::{doc, Bson};
-use serde_json;
 use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::iter::Iterator;
 use std::sync::Arc;
-use tokio;
 use tokio::time::delay_for as sleep;
 
 use mongodb::options::{ClientOptions, CountOptions, FindOneOptions};
@@ -496,7 +494,7 @@ impl Main {
                 .get_league_entries(self.region, tier, division, Some(page))
                 .await
                 .map_err(|_| anyhow::Error::msg("Error get_league_entries"))?;
-            if x.len() == 0 {
+            if x.is_empty() {
                 break;
             };
 
