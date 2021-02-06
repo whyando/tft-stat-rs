@@ -277,12 +277,6 @@ impl Main {
             let tft_rank = league_doc.get_str("rank").unwrap_or("unranked");
             let tft_league_points = league_doc.get_i32("leaguePoints").unwrap_or(i32::MIN);
 
-            ranks_vec.push((
-                tft_tier.to_string(),
-                tft_rank.to_string(),
-                tft_league_points,
-            ));
-
             // 4. construct object to append to the game with all known info
             let aggregated_doc = doc! {
                 "summonerId": summoner_id,
@@ -297,12 +291,18 @@ impl Main {
 
             let league_status = league_doc.get_str("_status")?;
             if league_status == "ranked" {
+                ranks_vec.push((
+                    tft_tier.to_string(),
+                    tft_rank.to_string(),
+                    tft_league_points,
+                ));
+
                 sum += league_to_numeric(tft_tier, tft_rank, tft_league_points);
                 num_ranked += 1;
             }
         }
-        let (avg_elo, avg_elo_str) = if num_ranked == 8 {
-            (sum / 8, team_avg_rank_str(&ranks_vec))
+        let (avg_elo, avg_elo_str) = if num_ranked >= 6 {
+            (sum / num_ranked, team_avg_rank_str(&ranks_vec))
         } else {
             (i32::MIN, "UNRANKED".to_string())
         };

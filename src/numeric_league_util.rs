@@ -84,16 +84,18 @@ pub fn elo_to_str(x: i32) -> String {
 
 // Given a list of players, return the average elo, in string form
 pub fn team_avg_rank_str(ranks: &[(String, String, i32)]) -> String {
-    assert!(!ranks.is_empty());
+    let num_players = ranks.len() as i32;
+    assert!(num_players > 0);
+
     let mut sum = 0;
     for (tier, rank, league_points) in ranks {
         sum += league_to_numeric(tier, rank, *league_points);
     }
-    let x: i32 = sum / (ranks.len() as i32);
+    let x: i32 = sum / num_players;
     let (mut tier, rank, avg_lp) = numeric_to_league(x);
 
     if tier == "MASTER+" {
-        // Take another average over the 8 players, where
+        // Take another average over the N players, where
         // CHALLENGER=3, GM=2, MASTER=1. Round to the closest.
         let mut sum = 0;
         for (tier, _, _) in ranks {
@@ -104,10 +106,10 @@ pub fn team_avg_rank_str(ranks: &[(String, String, i32)]) -> String {
                 _ => 0,
             }
         }
-        tier = if sum < 12 {
+        tier = if 2 * sum < 3 * num_players {
             // avg less than 1.5
             "MASTER".to_string()
-        } else if sum < 20 {
+        } else if 2 * sum < 5 * num_players {
             // avg less than 2.5
             "GRANDMASTER".to_string()
         } else {
