@@ -209,11 +209,11 @@ impl Main {
                 doc.insert("_id", Bson::String(id.to_string()));
                 doc.insert("_documentCreated", Bson::DateTime(current_timestamp));
                 doc.insert("_matchTimestamp", Bson::DateTime(match_timestamp));
-                // Don't expire this document until the game date was 7 days ago
+                // Don't expire this document until the game date was 2 days ago
                 // Additionally don't expire within the next 24 hours
                 let expire = std::cmp::max(
                     current_timestamp + Duration::hours(24),
-                    match_timestamp + Duration::days(7),
+                    match_timestamp + Duration::days(2),
                 );
                 doc.insert("_documentExpire", Bson::DateTime(expire));
 
