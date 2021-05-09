@@ -290,13 +290,36 @@ impl Main {
             trace!("{}", summoner_id);
 
             // 3. get 8 tft league entries (cached or riot query)
-            let league_doc = self
-                .tft_league_v1(summoner_id)
-                .await
-                .map_err(|e| anyhow::Error::msg(format!("Error tft_league_v1: '{}'", e)))?;
-            let tft_tier = league_doc.get_str("tier").unwrap_or("unranked");
-            let tft_rank = league_doc.get_str("rank").unwrap_or("unranked");
-            let tft_league_points = league_doc.get_i32("leaguePoints").unwrap_or(i32::MIN);
+            let (rank_known, tft_tier, tft_rank, tft_league_points) = {
+                let league_doc = self.tft_league_v1(summoner_id).await;
+                match league_doc {
+                    Ok(league_doc) => {
+                        let ranked: bool = league_doc.get_str("_status")? == "ranked";
+                        let tft_tier = league_doc.get_str("tier").unwrap_or("unranked");
+                        let tft_rank = league_doc.get_str("rank").unwrap_or("unranked");
+                        let tft_league_points =
+                            league_doc.get_i32("leaguePoints").unwrap_or(i32::MIN);
+                        (
+                            ranked,
+                            tft_tier.to_string(),
+                            tft_rank.to_string(),
+                            tft_league_points,
+                        )
+                    }
+                    Err(e) => {
+                        error!(
+                            "Error fetching league for summoner id {}. Raw error: '{}'",
+                            summoner_id, e
+                        );
+                        (
+                            false,
+                            "unknown".to_string(),
+                            "unknown".to_string(),
+                            i32::MIN,
+                        )
+                    }
+                }
+            };
 
             // 4. construct object to append to the game with all known info
             let aggregated_doc = doc! {
@@ -304,25 +327,20 @@ impl Main {
                 "summonerName": summoner_doc.get_str("name")?,
                 "accountId": summoner_doc.get_str("accountId")?,
                 "puuid": puuid,
-                "tftTier": tft_tier,
-                "tftRank": tft_rank,
+                "tftTier": tft_tier.clone(),
+                "tftRank": tft_rank.clone(),
                 "tftLeaguePoints": tft_league_points,
             };
             ret.push(aggregated_doc.into());
 
-            let league_status = league_doc.get_str("_status")?;
-            if league_status == "ranked" {
-                ranks_vec.push((
-                    tft_tier.to_string(),
-                    tft_rank.to_string(),
-                    tft_league_points,
-                ));
+            if rank_known {
+                ranks_vec.push((tft_tier.clone(), tft_rank.clone(), tft_league_points));
 
-                sum += league_to_numeric(tft_tier, tft_rank, tft_league_points);
+                sum += league_to_numeric(&tft_tier, &tft_rank, tft_league_points);
                 num_ranked += 1;
             }
         }
-        let (avg_elo, avg_elo_str) = if num_ranked >= 6 {
+        let (avg_elo, avg_elo_str) = if num_ranked >= 1 {
             (sum / num_ranked, team_avg_rank_str(&ranks_vec))
         } else {
             (i32::MIN, "UNRANKED".to_string())
