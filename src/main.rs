@@ -25,6 +25,12 @@ const MATCHES_COLLECTION_NAME: &str = "matches-4-1";
 const SUMMONERS_COLLECTION_NAME: &str = "summoner-4-1";
 const LEAGUES_COLLECTION_NAME: &str = "league-4-1";
 
+#[derive(Copy, Clone, Debug)]
+enum TftQueue {
+    Ranked,
+    Hyperroll,
+}
+
 #[tokio::main]
 async fn main() -> () {
     env_logger::init();
@@ -48,19 +54,21 @@ async fn main() -> () {
 
     let mut join_handles = vec![];
 
-    for (region, region_major) in &[
-        (Region::EUW, Region::EUROPE),
-        (Region::EUNE, Region::EUROPE),
-        (Region::KR, Region::ASIA),
-        (Region::JP, Region::ASIA),
-        (Region::NA, Region::AMERICAS),
-        (Region::BR, Region::AMERICAS),
-        (Region::OCE, Region::AMERICAS),
+    for (queue_type, region, region_major) in &[
+        (TftQueue::Ranked, Region::EUW, Region::EUROPE),
+        (TftQueue::Ranked, Region::EUNE, Region::EUROPE),
+        (TftQueue::Ranked, Region::KR, Region::ASIA),
+        (TftQueue::Ranked, Region::JP, Region::ASIA),
+        (TftQueue::Ranked, Region::NA, Region::AMERICAS),
+        (TftQueue::Ranked, Region::BR, Region::AMERICAS),
+        (TftQueue::Ranked, Region::OCE, Region::AMERICAS),
+        (TftQueue::Hyperroll, Region::EUW, Region::EUROPE),
     ] {
         let api_clone = api.clone();
         let db_clone = db.clone();
         let hdl = tokio::spawn(async move {
             Main {
+                queue_type: *queue_type,
                 region: *region,
                 region_major: *region_major,
                 api: api_clone,
@@ -78,6 +86,7 @@ async fn main() -> () {
 #[derive(Clone)]
 struct Main {
     api: Arc<RiotApi>,
+    queue_type: TftQueue,
     region: Region,
     region_major: Region,
     db: Arc<mongodb::Database>,
@@ -92,10 +101,11 @@ impl Main {
     }
 
     async fn do_cycle(&self) {
-        info!("[{}] Main begin.", self.region);
+        info!("[{:?} {}] Main begin.", self.queue_type, self.region);
         let summoner_list = self.get_top_players().await;
         info!(
-            "[{}] Gathered summoner ids for {} players.",
+            "[{:?} {}] Gathered summoner ids for {} players.",
+            self.queue_type,
             self.region,
             summoner_list.len()
         );
@@ -407,8 +417,15 @@ impl Main {
         Ok(doc)
     }
 
-    // Returns a list of summoner ids
     async fn get_top_players(&self) -> Vec<String> {
+        match self.queue_type {
+            TftQueue::Ranked => self.get_top_players_ranked().await,
+            TftQueue::Hyperroll => self.get_top_players_hyperroll().await,
+        }
+    }
+
+    // Returns a list of summoner ids
+    async fn get_top_players_ranked(&self) -> Vec<String> {
         let mut ret = Vec::new();
 
         // TODO: make divisions configurable
@@ -448,6 +465,33 @@ impl Main {
             };
             info!("{} {} {}\t{}", self.region, tier, division, entries.len());
             ret.append(&mut entries);
+        }
+        ret
+    }
+
+    async fn get_top_players_hyperroll(&self) -> Vec<String> {
+        let riot_url = format!(
+            "https://{}.api.riotgames.com/tft/league/v1/rated-ladders/RANKED_TFT_TURBO/top",
+            self.region.to_string().to_lowercase()
+        );
+        info!("{}", riot_url);
+        let body = reqwest::get(&format!(
+            "{}?api_key={}",
+            &riot_url,
+            std::env::var("RGAPI_KEY").unwrap()
+        ))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+        info!("{}", body);
+        let val: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let vec = val.as_array().unwrap();
+
+        let mut ret = Vec::new();
+        for v in vec {
+            ret.push(v["summonerId"].as_str().unwrap().to_string());
         }
         ret
     }
