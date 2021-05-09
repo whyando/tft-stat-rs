@@ -307,10 +307,7 @@ impl Main {
                         )
                     }
                     Err(e) => {
-                        error!(
-                            "Error fetching league for summoner id {}. Raw error: '{}'",
-                            summoner_id, e
-                        );
+                        error!("Error tft_league_v1.by_summoner_id({})", summoner_id,);
                         (
                             false,
                             "unknown".to_string(),
