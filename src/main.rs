@@ -63,6 +63,12 @@ async fn main() -> () {
         (TftQueue::Ranked, Region::BR, Region::AMERICAS),
         (TftQueue::Ranked, Region::OCE, Region::AMERICAS),
         (TftQueue::Hyperroll, Region::EUW, Region::EUROPE),
+        (TftQueue::Hyperroll, Region::EUNE, Region::EUROPE),
+        (TftQueue::Hyperroll, Region::KR, Region::ASIA),
+        (TftQueue::Hyperroll, Region::JP, Region::ASIA),
+        (TftQueue::Hyperroll, Region::NA, Region::AMERICAS),
+        (TftQueue::Hyperroll, Region::BR, Region::AMERICAS),
+        (TftQueue::Hyperroll, Region::OCE, Region::AMERICAS),
     ] {
         let api_clone = api.clone();
         let db_clone = db.clone();
@@ -133,6 +139,11 @@ impl Main {
         }
 
         info!("[{}] Main Done.", self.region);
+        let delay = match self.queue_type {
+            TftQueue::Ranked => 300,    // 5 minutes
+            TftQueue::Hyperroll => 600, // 10 minutes
+        };
+        sleep(tokio::time::Duration::from_secs(delay)).await;
     }
 
     /// Do all processing for a single summoner
