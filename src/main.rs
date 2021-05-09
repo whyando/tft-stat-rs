@@ -17,7 +17,7 @@ use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::iter::Iterator;
 use std::sync::Arc;
-use tokio::time::delay_for as sleep;
+use tokio::time::sleep;
 
 use numeric_league_util::{league_to_numeric, team_avg_rank_str};
 
@@ -86,7 +86,7 @@ async fn main() -> () {
         join_handles.push(hdl);
     }
     let (_i, idx, _v) = futures::future::select_all(join_handles).await;
-    panic!(format!("Handle {} returned.", idx));
+    panic!("Handle {} returned.", idx);
 }
 
 #[derive(Clone)]
@@ -306,7 +306,7 @@ impl Main {
                             tft_league_points,
                         )
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         error!("Error tft_league_v1.by_summoner_id({})", summoner_id,);
                         (
                             false,

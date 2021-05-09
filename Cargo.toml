@@ -8,14 +8,14 @@ edition = "2018"
 
 [dependencies]
 # Last riven release before tokio 1.0
-riven = "=1.10.3"
+riven = "1.10.3"
 
 futures = "0.3"
-tokio = { version = "0.2", features = ["macros", "time"]}
+tokio = { version = "1", features = ["macros", "time"]}
 log = "0.4"
 env_logger = "0.8"
 anyhow = "1"
-mongodb = "1"
+mongodb = "2.0.0-alpha.1"
 serde_json = "1"
 chrono = "0.4"
-reqwest = { version = "0.10", features = ["json"] }
+reqwest = { version = "0.11", features = ["json"] }
