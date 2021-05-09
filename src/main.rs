@@ -230,11 +230,11 @@ impl Main {
                 doc.insert("_id", Bson::String(id.to_string()));
                 doc.insert("_documentCreated", Bson::DateTime(current_timestamp));
                 doc.insert("_matchTimestamp", Bson::DateTime(match_timestamp));
-                // Don't expire this document until the game date was 2 days ago
+                // Don't expire this document until the game date was 4 days ago
                 // Additionally don't expire within the next 24 hours
                 let expire = std::cmp::max(
                     current_timestamp + Duration::hours(24),
-                    match_timestamp + Duration::days(2),
+                    match_timestamp + Duration::days(4),
                 );
                 doc.insert("_documentExpire", Bson::DateTime(expire));
 
@@ -442,20 +442,20 @@ impl Main {
         // TODO: make divisions configurable
         for (tier, division) in &[
             // ("CHALLENGER", "I"),
-            // ("GRANDMASTER", "I"),
-            // ("MASTER", "I"),
+            ("GRANDMASTER", "I"),
+            ("MASTER", "I"),
             ("DIAMOND", "I"),
             ("DIAMOND", "II"),
             ("DIAMOND", "III"),
-            ("DIAMOND", "IV"),
-            ("PLATINUM", "I"),
-            ("PLATINUM", "II"),
-            ("PLATINUM", "III"),
-            ("PLATINUM", "IV"),
-            ("GOLD", "I"),
-            ("GOLD", "II"),
-            ("GOLD", "III"),
-            ("GOLD", "IV"),
+            // ("DIAMOND", "IV"),
+            // ("PLATINUM", "I"),
+            // ("PLATINUM", "II"),
+            // ("PLATINUM", "III"),
+            // ("PLATINUM", "IV"),
+            // ("GOLD", "I"),
+            // ("GOLD", "II"),
+            // ("GOLD", "III"),
+            // ("GOLD", "IV"),
             // ("SILVER", "I"),
             // ("SILVER", "II"),
             // ("SILVER", "III"),
