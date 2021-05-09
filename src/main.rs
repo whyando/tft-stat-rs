@@ -293,7 +293,7 @@ impl Main {
             let league_doc = self
                 .tft_league_v1(summoner_id)
                 .await
-                .map_err(|_| anyhow::Error::msg("Error tft_league_v1"))?;
+                .map_err(|e| anyhow::Error::msg(format!("Error tft_league_v1: '{}'", e)))?;
             let tft_tier = league_doc.get_str("tier").unwrap_or("unranked");
             let tft_rank = league_doc.get_str("rank").unwrap_or("unranked");
             let tft_league_points = league_doc.get_i32("leaguePoints").unwrap_or(i32::MIN);
