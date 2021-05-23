@@ -425,8 +425,9 @@ impl Main {
                 };
                 doc.insert("_id", Bson::String(summoner_id.to_string()));
                 doc.insert("_documentCreated", Bson::DateTime(current_timestamp));
-                // Don't expire this document for 1 days
-                let expire = current_timestamp + Duration::days(1);
+                // Don't expire this document for 1 days (or less if high ranked)
+                let expire =
+                    current_timestamp + self.variable_tft_league_v1_expiry_duration(&doc).await;
                 doc.insert("_documentExpire", Bson::DateTime(expire));
                 leagues
                     .insert_one(doc.clone(), None)
@@ -443,6 +444,16 @@ impl Main {
         Ok(doc)
     }
 
+    async fn variable_tft_league_v1_expiry_duration(&self, league_doc: &Document) -> Duration {
+        let tft_tier = league_doc.get_str("tier").unwrap_or("unranked");
+        match tft_tier {
+            "CHALLENGER" => Duration::hours(3),
+            "GRANDMASTER" => Duration::hours(6),
+            "MASTER" => Duration::hours(12),
+            _ => Duration::hours(24),
+        }
+    }
+
     async fn get_top_players(&self) -> Vec<String> {
         match self.queue_type {
             TftQueue::Ranked => self.get_top_players_ranked().await,
@@ -456,7 +467,7 @@ impl Main {
 
         // TODO: make divisions configurable
         for (tier, division) in &[
-            // ("CHALLENGER", "I"),
+            ("CHALLENGER", "I"),
             ("GRANDMASTER", "I"),
             ("MASTER", "I"),
             ("DIAMOND", "I"),
