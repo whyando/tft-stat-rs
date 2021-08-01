@@ -1,11 +1,6 @@
-##DESCRIPTION
+DEPRECATED
 
-todo
+see
+https://github.com/whyando/tft-database-server
+https://github.com/whyando/tft-watcher
 
-##INSTALLATION
-
-todo
-
-##TESTING
-
-todo
